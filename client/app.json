@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "react-native-boilerplate",
+    "slug": "react-native-boilerplate",
+    "scheme": "rnboilerplate",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "jsEngine": "hermes",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.example.rnboilerplate"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
