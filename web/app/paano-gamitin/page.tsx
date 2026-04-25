@@ -62,9 +62,6 @@ const steps: Step[] = [
   },
 ];
 
-/** Row order: 1 | 4, then 2 | 5, then 3 | 6 */
-const stepsGridOrder: Step[] = [steps[0], steps[3], steps[1], steps[4], steps[2], steps[5]];
-
 function StepCard({ step }: { step: Step }) {
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-emerald-100/80 bg-white shadow-sm">
@@ -106,7 +103,7 @@ export default function PaanoGamitinPage() {
         </section>
 
         <section className="mt-10 grid grid-cols-2 gap-3 sm:mt-12 sm:gap-5">
-          {stepsGridOrder.map((step) => (
+          {steps.map((step) => (
             <StepCard key={step.n} step={step} />
           ))}
         </section>
