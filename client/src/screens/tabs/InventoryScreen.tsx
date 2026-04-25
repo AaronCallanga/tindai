@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Modal,
@@ -99,6 +100,9 @@ function getItemMetaLine(item: LocalInventoryItem) {
 }
 
 export function InventoryScreen() {
+  const navigation = useNavigation<any>();
+  const route = useRoute();
+  const isFocused = useIsFocused();
   const {
     appState,
     store,
@@ -170,6 +174,22 @@ export function InventoryScreen() {
     setItemPrice('');
     setIsAddItemVisible(true);
   }, []);
+
+  useEffect(() => {
+    const requestId =
+      typeof route.params === 'object' && route.params !== null && 'openAddItemRequestId' in route.params
+        ? route.params.openAddItemRequestId
+        : undefined;
+
+    if (!isFocused || typeof requestId !== 'string' || requestId.length === 0) {
+      return;
+    }
+
+    handleOpenAddItem();
+    navigation.setParams({
+      openAddItemRequestId: undefined,
+    });
+  }, [handleOpenAddItem, isFocused, navigation, route.params]);
 
   const handleOpenEditItem = useCallback(() => {
     if (!selectedItem) {

@@ -17,6 +17,8 @@ const mockedUpdateInventoryItemMetadata = vi.fn<
   (entry: { itemId: string; name: string; cost: number; price: number; lowStockThreshold: number }) => Promise<void>
 >(async () => undefined);
 const mockedArchiveLocalInventoryItem = vi.fn<(itemId: string) => Promise<void>>(async () => undefined);
+const mockedSetParams = vi.fn();
+let mockedInventoryRouteParams: { openAddItemRequestId?: string } = {};
 
 let mockedInventoryItems: LocalInventoryItem[] = [];
 let mockedPendingTransactions: Array<{
@@ -69,6 +71,16 @@ vi.mock('@/navigation/colors', () => ({
     accent: '#D9A93F',
     border: 'rgba(31, 122, 99, 0.14)',
   },
+}));
+
+vi.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({
+    setParams: mockedSetParams,
+  }),
+  useRoute: () => ({
+    params: mockedInventoryRouteParams,
+  }),
+  useIsFocused: () => true,
 }));
 
 vi.mock('@/features/local-data/LocalDataContext', () => ({
@@ -160,6 +172,8 @@ describe('InventoryScreen', () => {
     mockedCreateLocalInventoryItem.mockClear();
     mockedUpdateInventoryItemMetadata.mockClear();
     mockedArchiveLocalInventoryItem.mockClear();
+    mockedSetParams.mockReset();
+    mockedInventoryRouteParams = {};
     mockedInventoryItems = [
       buildItem({
         id: 'item-softdrink',
@@ -279,6 +293,16 @@ describe('InventoryScreen', () => {
       cost: 14.5,
       price: 18,
     });
+  });
+
+  it('opens the add item modal immediately when inventory is requested from analytics', async () => {
+    mockedInventoryRouteParams = { openAddItemRequestId: 'analytics-empty-state' };
+
+    const tree = await renderInventoryScreen();
+
+    expect(findTextNodes(tree, 'Magdagdag ng item')).not.toHaveLength(0);
+    expect(findByTestId(tree, 'inventory-add-name-input')).toBeDefined();
+    expect(mockedSetParams).toHaveBeenCalledWith({ openAddItemRequestId: undefined });
   });
 
   it('shows an empty inventory state when there are no items yet', async () => {

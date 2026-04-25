@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 
 import { supabase } from '@/config/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { AnalyticsView } from '@/features/analytics/AnalyticsView';
 import { fetchAnalyticsSummary, type RemoteAnalyticsSummary } from '@/features/analytics/analyticsApi';
-import {
-  ANALYTICS_PREVIEW_INVENTORY_ITEMS,
-  ANALYTICS_PREVIEW_NOW,
-  ANALYTICS_PREVIEW_SALES_ROWS,
-} from '@/features/analytics/analyticsPreviewData';
 import { loadAnalyticsSalesRows } from '@/features/analytics/analyticsRepository';
 import {
   buildAnalyticsViewModel,
@@ -20,6 +16,7 @@ import { useLocalData } from '@/features/local-data/LocalDataContext';
 type AnalyticsTabKey = 'Overview' | 'Insights' | 'Predictions & AI';
 
 export function AnalyticsScreen() {
+  const navigation = useNavigation<any>();
   const { isAuthenticated } = useAuth();
   const { store, inventoryItems, pendingTransactions } = useLocalData();
   const [activeTab, setActiveTab] = useState<AnalyticsTabKey>('Overview');
@@ -30,10 +27,8 @@ export function AnalyticsScreen() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const hasPendingTransactions = pendingTransactions.length > 0;
-  const isUsingPreviewData = salesRows.length === 0 && !remoteSummary;
-  const effectiveInventoryItems = isUsingPreviewData ? ANALYTICS_PREVIEW_INVENTORY_ITEMS : inventoryItems;
-  const effectiveSalesRows = isUsingPreviewData ? ANALYTICS_PREVIEW_SALES_ROWS : salesRows;
   const showSkeleton = isLoading && salesRows.length === 0 && !remoteSummary;
+  const showEmptyState = Boolean(store) && inventoryItems.length === 0 && salesRows.length === 0 && !remoteSummary;
 
   const loadAnalytics = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -121,12 +116,11 @@ export function AnalyticsScreen() {
       return buildAnalyticsViewModel({
         currencyCode: store?.currencyCode ?? 'PHP',
         timezone: store?.timezone ?? 'Asia/Manila',
-        inventoryItems: effectiveInventoryItems,
-        salesRows: effectiveSalesRows,
-        now: isUsingPreviewData ? ANALYTICS_PREVIEW_NOW : undefined,
+        inventoryItems,
+        salesRows,
       });
     },
-    [effectiveInventoryItems, effectiveSalesRows, isUsingPreviewData, store?.currencyCode, store?.timezone],
+    [inventoryItems, salesRows, store?.currencyCode, store?.timezone],
   );
 
   const viewModel = useMemo<AnalyticsViewModel>(() => {
@@ -150,10 +144,28 @@ export function AnalyticsScreen() {
   }, [hasPendingTransactions, localViewModel, remoteSummary]);
 
   const error = localError ?? remoteError;
+  const handleAddFirstItem = useCallback(() => {
+    navigation.navigate(
+      'Inventory' as never,
+      {
+        openAddItemRequestId: 'analytics-empty-state',
+      } as never,
+    );
+  }, [navigation]);
 
   return (
     <AnalyticsView
       activeTab={activeTab}
+      emptyState={
+        showEmptyState
+          ? {
+              title: 'Wala pang mababasang galaw',
+              body: 'Magdagdag muna ng unang item para magsimulang lumabas dito ang benta, stock, at mga payo.',
+              actionLabel: 'Add your first item',
+              onAction: handleAddFirstItem,
+            }
+          : null
+      }
       error={error}
       isLoading={isLoading}
       isRefreshing={isRefreshing}
