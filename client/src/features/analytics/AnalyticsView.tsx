@@ -28,6 +28,12 @@ type AnalyticsViewProps = {
   isRefreshing: boolean;
   showSkeleton: boolean;
   error: string | null;
+  emptyState: {
+    title: string;
+    body: string;
+    actionLabel: string;
+    onAction: () => void;
+  } | null;
 };
 
 const tabs: AnalyticsTabKey[] = ['Overview', 'Insights', 'Predictions & AI'];
@@ -42,8 +48,10 @@ export function AnalyticsView({
   isRefreshing,
   showSkeleton,
   error,
+  emptyState,
 }: AnalyticsViewProps) {
   const headerTitle = activeTab === 'Insights' ? 'Analytics Insights' : 'Business Insights';
+  const showContentEmptyState = !showSkeleton && emptyState !== null;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -74,23 +82,25 @@ export function AnalyticsView({
             </View>
           </View>
 
-          <View style={styles.topTabRail}>
-            {tabs.map((tab) => {
-              const isActive = tab === activeTab;
+          {!showContentEmptyState ? (
+            <View style={styles.topTabRail}>
+              {tabs.map((tab) => {
+                const isActive = tab === activeTab;
 
-              return (
-                <Pressable
-                  key={tab}
-                  accessibilityRole="button"
-                  onPress={() => onTabChange(tab)}
-                  style={styles.topTabButton}
-                >
-                  <Text style={[styles.topTabText, isActive ? styles.topTabTextActive : undefined]}>{tab}</Text>
-                  <View style={[styles.topTabUnderline, isActive ? styles.topTabUnderlineActive : undefined]} />
-                </Pressable>
-              );
-            })}
-          </View>
+                return (
+                  <Pressable
+                    key={tab}
+                    accessibilityRole="button"
+                    onPress={() => onTabChange(tab)}
+                    style={styles.topTabButton}
+                  >
+                    <Text style={[styles.topTabText, isActive ? styles.topTabTextActive : undefined]}>{tab}</Text>
+                    <View style={[styles.topTabUnderline, isActive ? styles.topTabUnderlineActive : undefined]} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
 
           {error ? (
             <View style={styles.errorCard}>
@@ -100,12 +110,38 @@ export function AnalyticsView({
           ) : null}
 
           {showSkeleton ? <LoadingSkeleton activeTab={activeTab} /> : null}
-          {!showSkeleton && activeTab === 'Overview' ? <OverviewTab isLoading={isLoading} viewModel={viewModel} /> : null}
-          {!showSkeleton && activeTab === 'Insights' ? <InsightsTab isLoading={isLoading} viewModel={viewModel} /> : null}
-          {!showSkeleton && activeTab === 'Predictions & AI' ? <PredictionsTab isLoading={isLoading} viewModel={viewModel} /> : null}
+          {showContentEmptyState ? <EmptyAnalyticsState emptyState={emptyState} /> : null}
+          {!showSkeleton && !showContentEmptyState && activeTab === 'Overview' ? (
+            <OverviewTab isLoading={isLoading} viewModel={viewModel} />
+          ) : null}
+          {!showSkeleton && !showContentEmptyState && activeTab === 'Insights' ? (
+            <InsightsTab isLoading={isLoading} viewModel={viewModel} />
+          ) : null}
+          {!showSkeleton && !showContentEmptyState && activeTab === 'Predictions & AI' ? (
+            <PredictionsTab isLoading={isLoading} viewModel={viewModel} />
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function EmptyAnalyticsState({
+  emptyState,
+}: {
+  emptyState: NonNullable<AnalyticsViewProps['emptyState']>;
+}) {
+  return (
+    <View style={styles.emptyStateCard}>
+      <View style={styles.emptyStateIconWrap}>
+        <Ionicons color={colors.primaryDeep} name="bar-chart-outline" size={24} />
+      </View>
+      <Text style={styles.emptyStateTitle}>{emptyState.title}</Text>
+      <Text style={styles.emptyStateBody}>{emptyState.body}</Text>
+      <Pressable accessibilityRole="button" onPress={emptyState.onAction} style={styles.emptyStateAction}>
+        <Text style={styles.emptyStateActionText}>{emptyState.actionLabel}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -756,6 +792,44 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     lineHeight: 18,
+  },
+  emptyStateCard: {
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    padding: 22,
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  emptyStateIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  emptyStateBody: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  emptyStateAction: {
+    minHeight: 44,
+    borderRadius: 999,
+    backgroundColor: colors.primaryDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  emptyStateActionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   tabStack: {
     gap: 16,

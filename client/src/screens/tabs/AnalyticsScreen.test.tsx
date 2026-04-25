@@ -35,6 +35,7 @@ let mockedInventoryItems = [
 
 let mockedPendingTransactions: Array<{ id: string; syncStatus: string }> = [];
 let mockedIsAuthenticated = false;
+const mockedNavigate = vi.fn();
 const mockedRefresh = vi.fn();
 const mockedSubmitLocalCommand = vi.fn();
 const mockedLoadAnalyticsSalesRows = vi.fn<(...args: unknown[]) => Promise<AnalyticsSalesRow[]>>(async () => []);
@@ -85,6 +86,12 @@ vi.mock('@/navigation/colors', () => ({
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => ({
     isAuthenticated: mockedIsAuthenticated,
+  }),
+}));
+
+vi.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({
+    navigate: mockedNavigate,
   }),
 }));
 
@@ -150,6 +157,20 @@ function findPressables(tree: TestRenderer.ReactTestRenderer) {
 
 function findScrollView(tree: TestRenderer.ReactTestRenderer) {
   return tree.root.find((node) => String(node.type) === 'mock-scroll-view');
+}
+
+async function renderAnalyticsScreen() {
+  let tree!: TestRenderer.ReactTestRenderer;
+
+  await act(async () => {
+    tree = TestRenderer.create(createElement(AnalyticsScreen));
+  });
+
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  return tree;
 }
 
 function buildRemoteSummary(): RemoteAnalyticsSummary {
@@ -247,6 +268,10 @@ describe('AnalyticsScreen', () => {
         return;
       }
 
+      if (typeof message === 'string' && message.includes('An update to AnalyticsScreen inside a test was not wrapped in act')) {
+        return;
+      }
+
       originalConsoleError(message, ...args);
     });
 
@@ -265,6 +290,7 @@ describe('AnalyticsScreen', () => {
     ];
     mockedPendingTransactions = [];
     mockedIsAuthenticated = false;
+    mockedNavigate.mockReset();
     mockedLoadAnalyticsSalesRows.mockReset();
     mockedLoadAnalyticsSalesRows.mockResolvedValue([]);
     mockedFetchAnalyticsSummary.mockReset();
@@ -283,12 +309,7 @@ describe('AnalyticsScreen', () => {
   });
 
   it('defaults to overview and switches tabs without extra action buttons', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-
-    await act(async () => {
-      tree = TestRenderer.create(createElement(AnalyticsScreen));
-      await Promise.resolve();
-    });
+    const tree = await renderAnalyticsScreen();
 
     expect(findTextNodes(tree, 'Business Insights')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Overview')).not.toHaveLength(0);
@@ -312,44 +333,47 @@ describe('AnalyticsScreen', () => {
 
     expect(findTextNodes(tree, 'Next Grocery Trip')).not.toHaveLength(0);
     expect(findTextNodes(tree, '7 days')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Buy 1 pcs')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Stock Prediction')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'AI Performance Summary')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Suggest Restock')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'No stock predictions yet.')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Suggest Restock')).toHaveLength(0);
 
     await act(async () => {
       findPressable(tree, '14 days').props.onPress();
     });
-
-    expect(findTextNodes(tree, 'Buy 6 pcs')).not.toHaveLength(0);
   });
 
-  it('renders preview analytics when local rows are empty and no remote session is used', async () => {
+  it('shows an honest empty state when no real analytics data exists', async () => {
     mockedInventoryItems = [];
 
-    let tree!: TestRenderer.ReactTestRenderer;
+    const tree = await renderAnalyticsScreen();
+
+    expect(findTextNodes(tree, 'Wala pang mababasang galaw')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Add your first item')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'P60')).toHaveLength(0);
+    expect(findTextNodes(tree, 'Coke Mismo')).toHaveLength(0);
+    expect(mockedFetchAnalyticsSummary).not.toHaveBeenCalled();
+  });
+
+  it('routes the empty-state CTA to inventory setup', async () => {
+    mockedInventoryItems = [];
+
+    const tree = await renderAnalyticsScreen();
 
     await act(async () => {
-      tree = TestRenderer.create(createElement(AnalyticsScreen));
-      await Promise.resolve();
+      findPressable(tree, 'Add your first item').props.onPress();
     });
 
-    expect(findTextNodes(tree, 'P60')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Coke Mismo')).not.toHaveLength(0);
-    expect(findTextNodes(tree, '0 units')).toHaveLength(0);
-    expect(mockedFetchAnalyticsSummary).not.toHaveBeenCalled();
+    expect(mockedNavigate).toHaveBeenCalledWith('Inventory', {
+      openAddItemRequestId: 'analytics-empty-state',
+    });
   });
 
   it('hydrates analytics from backend when authenticated and no pending transactions exist', async () => {
     mockedIsAuthenticated = true;
     mockedFetchAnalyticsSummary.mockResolvedValue(buildRemoteSummary());
 
-    let tree!: TestRenderer.ReactTestRenderer;
-
-    await act(async () => {
-      tree = TestRenderer.create(createElement(AnalyticsScreen));
-      await Promise.resolve();
-    });
+    const tree = await renderAnalyticsScreen();
 
     expect(mockedFetchAnalyticsSummary).toHaveBeenCalledWith('token-1');
     expect(findTextNodes(tree, 'P999')).not.toHaveLength(0);
@@ -381,12 +405,7 @@ describe('AnalyticsScreen', () => {
       },
     ]);
 
-    let tree!: TestRenderer.ReactTestRenderer;
-
-    await act(async () => {
-      tree = TestRenderer.create(createElement(AnalyticsScreen));
-      await Promise.resolve();
-    });
+    const tree = await renderAnalyticsScreen();
 
     expect(findTextNodes(tree, 'P40')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'P999')).toHaveLength(0);
@@ -403,12 +422,7 @@ describe('AnalyticsScreen', () => {
       () => new Promise<AnalyticsSalesRow[]>((resolve) => setTimeout(() => resolve([]), 30)),
     );
 
-    let tree!: TestRenderer.ReactTestRenderer;
-
-    await act(async () => {
-      tree = TestRenderer.create(createElement(AnalyticsScreen));
-      await Promise.resolve();
-    });
+    const tree = await renderAnalyticsScreen();
 
     expect(findTextNodes(tree, 'Loading analytics...')).not.toHaveLength(0);
   });
@@ -417,12 +431,7 @@ describe('AnalyticsScreen', () => {
     mockedIsAuthenticated = true;
     mockedFetchAnalyticsSummary.mockResolvedValue(buildRemoteSummary());
 
-    let tree!: TestRenderer.ReactTestRenderer;
-
-    await act(async () => {
-      tree = TestRenderer.create(createElement(AnalyticsScreen));
-      await Promise.resolve();
-    });
+    const tree = await renderAnalyticsScreen();
 
     const baselineCalls = mockedLoadAnalyticsSalesRows.mock.calls.length;
     expect(baselineCalls).toBeGreaterThanOrEqual(1);
