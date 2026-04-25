@@ -10,6 +10,7 @@ const inventory: LocalInventoryItem[] = [
     name: 'Coke Mismo',
     aliases: ['coke', 'coke mismo'],
     unit: 'pcs',
+    cost: null,
     price: 20,
     currentStock: 12,
     lowStockThreshold: 4,

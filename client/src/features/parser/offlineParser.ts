@@ -94,8 +94,21 @@ const NUMBER_WORDS: Record<string, number> = {
 
 const SALE_TERMS = ['nakabenta', 'nabenta', 'bawas', 'sold', 'sell', 'baligya', 'nabaligya', 'gibaligya'];
 const RESTOCK_TERMS = ['dagdag', 'nadagdagan', 'restock', 'refill', 'add', 'dugang', 'idugang', 'puni'];
-const UTANG_TERMS = ['utang', 'giutang', 'lista', 'ilista', 'kumuha', 'lista sa utang', 'isulat sa utang'];
+const UTANG_TERMS = ['utang', 'giutang', 'lista', 'ilista', 'palista', 'kumuha', 'lista sa utang', 'isulat sa utang'];
 const QUESTION_TERMS = ['ano', 'sino', 'ilan', 'magkano', 'low stock', 'unsa'];
+
+// STT spelling variants and common mishearings
+const STT_VARIANTS: Record<string, string> = {
+  kok: 'coke',
+  koke: 'coke',
+  itlok: 'itlog',
+  itlug: 'itlog',
+  safgard: 'safeguard',
+  safguard: 'safeguard',
+  baligya: 'baligya',
+  balya: 'baligya',
+  baligyad: 'baligya',
+};
 
 export function parseOfflineCommand(rawText: string, inventoryItems: LocalInventoryItem[]): ParserResult {
   const normalizedText = normalizeText(rawText);
@@ -180,6 +193,11 @@ function normalizeText(text: string) {
     .replace(/[.,!?]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // Apply STT variant normalization
+  for (const [variant, canonical] of Object.entries(STT_VARIANTS)) {
+    normalized = normalized.replace(new RegExp(`\\b${escapeRegExp(variant)}\\b`, 'g'), canonical);
+  }
 
   for (const [word, value] of Object.entries(NUMBER_WORDS).sort((a, b) => b[0].length - a[0].length)) {
     normalized = normalized.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'g'), String(value));

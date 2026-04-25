@@ -58,10 +58,17 @@ type LocalDataState = {
   createLocalCustomer: (name: string) => Promise<LocalCustomer>;
   submitAssistantQuestion: (questionText: string, inputMode: 'voice' | 'text') => Promise<{
     answerText: string;
+    spokenText: string | null;
     status: 'answered';
   }>;
   renameLocalStore: (name: string) => Promise<void>;
   resolvePendingClaim: (decision: 'claim' | 'discard') => Promise<void>;
+  createLocalInventoryItem: (entry: {
+    name: string;
+    quantity: number;
+    cost: number;
+    price: number;
+  }) => Promise<void>;
 };
 
 const LocalDataContext = createContext<LocalDataState | undefined>(undefined);
@@ -110,6 +117,71 @@ function createGuestStore(guestDeviceId: string): LocalStore {
     timezone: 'Asia/Manila',
     updatedAt: now,
   };
+}
+
+async function syncGuestCatalogToCloud(params: {
+  targetStoreId: string;
+  inventoryItems: LocalInventoryItem[];
+  customers: LocalCustomer[];
+}) {
+  const { data: remoteItems, error: remoteItemsError } = await supabase
+    .from('inventory_items')
+    .select('name')
+    .eq('store_id', params.targetStoreId)
+    .is('archived_at', null);
+
+  if (remoteItemsError) {
+    throw new Error('Unable to sync guest items.');
+  }
+
+  const existingInventoryNames = new Set((remoteItems ?? []).map((item) => item.name.trim().toLowerCase()));
+  const itemsToCreate = params.inventoryItems.filter((item) => !existingInventoryNames.has(item.name.trim().toLowerCase()));
+
+  if (itemsToCreate.length > 0) {
+    const { error } = await supabase.from('inventory_items').insert(
+      itemsToCreate.map((item) => ({
+        store_id: params.targetStoreId,
+        name: item.name,
+        aliases: item.aliases,
+        unit: item.unit,
+        cost: item.cost,
+        price: item.price,
+        low_stock_threshold: item.lowStockThreshold,
+      })),
+    );
+
+    if (error) {
+      throw new Error('Unable to sync guest items.');
+    }
+  }
+
+  const { data: remoteCustomers, error: remoteCustomersError } = await supabase
+    .from('customers')
+    .select('display_name')
+    .eq('store_id', params.targetStoreId)
+    .is('archived_at', null);
+
+  if (remoteCustomersError) {
+    throw new Error('Unable to sync guest customer names.');
+  }
+
+  const existingCustomerNames = new Set((remoteCustomers ?? []).map((customer) => customer.display_name.trim().toLowerCase()));
+  const customersToCreate = params.customers.filter(
+    (customer) => customer.name.trim() && !existingCustomerNames.has(customer.name.trim().toLowerCase()),
+  );
+
+  if (customersToCreate.length > 0) {
+    const { error } = await supabase.from('customers').insert(
+      customersToCreate.map((customer) => ({
+        store_id: params.targetStoreId,
+        display_name: customer.name,
+      })),
+    );
+
+    if (error) {
+      throw new Error('Unable to sync guest customer names.');
+    }
+  }
 }
 
 async function uploadPendingTransactions(accessToken: string, pending: PendingTransactionForSync[]) {
@@ -270,6 +342,60 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
       getFirstAsync: (source, params = []) => database.getFirstAsync(source, params as SQLite.SQLiteBindParams),
     });
   }, []);
+
+  const migrateLocalStoreData = useCallback(
+    async (params: { sourceStoreId: string; targetStore: LocalStore }) => {
+      const { database, storeRepository } = await createRepositories();
+      const now = new Date().toISOString();
+
+      await database.runAsync('begin immediate');
+
+      try {
+        await storeRepository.upsertStore(params.targetStore);
+
+        await database.runAsync(`update inventory_items set store_id = ?, updated_at = ? where store_id = ?`, [
+          params.targetStore.id,
+          now,
+          params.sourceStoreId,
+        ]);
+        await database.runAsync(`update customers set store_id = ?, updated_at = ? where store_id = ?`, [
+          params.targetStore.id,
+          now,
+          params.sourceStoreId,
+        ]);
+        await database.runAsync(`update transactions set store_id = ? where store_id = ?`, [
+          params.targetStore.id,
+          params.sourceStoreId,
+        ]);
+        await database.runAsync(`update transaction_items set store_id = ? where store_id = ?`, [
+          params.targetStore.id,
+          params.sourceStoreId,
+        ]);
+        await database.runAsync(`update inventory_movements set store_id = ? where store_id = ?`, [
+          params.targetStore.id,
+          params.sourceStoreId,
+        ]);
+        await database.runAsync(`update utang_entries set store_id = ? where store_id = ?`, [
+          params.targetStore.id,
+          params.sourceStoreId,
+        ]);
+        await database.runAsync(`update sync_events set store_id = ? where store_id = ?`, [
+          params.targetStore.id,
+          params.sourceStoreId,
+        ]);
+        await database.runAsync(`update assistant_interactions set store_id = ? where store_id = ?`, [
+          params.targetStore.id,
+          params.sourceStoreId,
+        ]);
+
+        await database.runAsync('commit');
+      } catch (error) {
+        await database.runAsync('rollback');
+        throw error;
+      }
+    },
+    [],
+  );
 
   const submitLocalCommand = useCallback(
     async (rawText: string, source: CommandSource = 'typed') => {
@@ -464,7 +590,7 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
         clientInteractionId,
         questionText: trimmed,
         inputMode,
-        outputMode: 'text',
+        outputMode: 'text_and_speech',
       });
 
       const { assistantInteractionRepository } = await createRepositories();
@@ -481,6 +607,7 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
 
       return {
         answerText: onlineAnswer.answerText,
+        spokenText: onlineAnswer.spokenText,
         status: 'answered' as const,
       };
     },
@@ -544,16 +671,77 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const createLocalInventoryItem = useCallback(
+    async (entry: { name: string; quantity: number; cost: number; price: number }) => {
+      if (!store) {
+        throw new Error('No local store is available.');
+      }
+
+      const { database, inventoryRepository } = await createRepositories();
+      const quantity = Math.max(0, Math.floor(entry.quantity));
+      const price = Math.max(0, entry.price);
+      const cost = Math.max(0, entry.cost);
+      const lowStockThreshold = quantity > 0 ? Math.min(5, quantity) : 0;
+      const createdItem = await inventoryRepository.createInventoryItemForStore({
+        storeId: store.id,
+        name: entry.name,
+        aliases: [entry.name],
+        unit: 'pcs',
+        cost,
+        price,
+        currentStock: 0,
+        lowStockThreshold,
+      });
+
+      if (quantity > 0) {
+        const ledgerService = createLedgerService(database);
+        await ledgerService.applyReadyParserResult(
+          store.id,
+          {
+            raw_text: `opening_stock:${createdItem.name}:${quantity}`,
+            normalized_text: `opening stock ${createdItem.name.toLowerCase()} ${quantity}`,
+            intent: 'restock',
+            confidence: 1,
+            status: 'ready_to_apply',
+            items: [
+              {
+                item_id: createdItem.id,
+                item_name: createdItem.name,
+                matched_alias: createdItem.name.toLowerCase(),
+                quantity,
+                quantity_delta: quantity,
+                unit: createdItem.unit,
+                confidence: 1,
+              },
+            ],
+            credit: { is_utang: false },
+            notes: ['opening_stock'],
+          },
+          { source: 'manual' },
+        );
+      }
+
+      await reloadStoreData(store.id);
+    },
+    [createLedgerService, reloadStoreData, store],
+  );
+
   const refresh = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setSyncNotice(null);
 
-    try {
-      const { appStateRepository, appState: state, storeRepository, inventoryRepository, transactionRepository } =
-        await loadCachedData();
-      let accessToken: string | undefined;
-      let userId: string | null = null;
+      try {
+        const {
+          appStateRepository,
+          appState: state,
+          storeRepository,
+          inventoryRepository,
+          customerRepository,
+          transactionRepository,
+        } = await loadCachedData();
+        let accessToken: string | undefined;
+        let userId: string | null = null;
 
       try {
         const sessionResult = await withTimeout(
@@ -583,6 +771,7 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
         await appStateRepository.updateState({
           mode: 'guest',
           activeStoreId: guestStore.id,
+          guestConverted: false,
         });
         setAppState(await appStateRepository.getOrCreateState());
         setStore(guestStore);
@@ -590,18 +779,41 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      let result: { storeId: string; inventoryCount: number } | null = null;
-      try {
-        result = await withTimeout(
-          bootstrapLocalData({
-            storeRepository,
-            inventoryRepository,
-            remoteDataSource: new RemoteDataSource(accessToken),
-          }),
-          LOCAL_REFRESH_TIMEOUT_MS,
-          'Cloud bootstrap timed out. Loaded local cache only.',
-        );
-      } catch (caughtError) {
+        const sourceStoreId = state.activeStoreId ?? `guest-store-${state.guestDeviceId}`;
+        const pendingCount = await transactionRepository.countPendingTransactionsForStore(sourceStoreId);
+        const localSourceInventory = await inventoryRepository.listInventoryForStore(sourceStoreId);
+        const localSourceCustomers = await customerRepository.listCustomersForStore(sourceStoreId);
+        const shouldMigrateGuestData =
+          state.mode === 'guest' &&
+          sourceStoreId.startsWith('guest-store-') &&
+          (localSourceInventory.length > 0 || pendingCount > 0);
+
+        let result: { storeId: string; inventoryCount: number } | null = null;
+        try {
+          if (state.guestConverted && state.mode === 'authenticated' && state.activeStoreId) {
+            const remoteDataSource = new RemoteDataSource(accessToken);
+            const remoteStore = await withTimeout(
+              remoteDataSource.getCurrentStore(),
+              LOCAL_REFRESH_TIMEOUT_MS,
+              'Cloud bootstrap timed out. Loaded local cache only.',
+            );
+            await storeRepository.upsertStore(remoteStore);
+            result = {
+              storeId: remoteStore.id,
+              inventoryCount: localSourceInventory.length,
+            };
+          } else {
+            result = await withTimeout(
+              bootstrapLocalData({
+                storeRepository,
+                inventoryRepository,
+                remoteDataSource: new RemoteDataSource(accessToken),
+              }),
+              LOCAL_REFRESH_TIMEOUT_MS,
+              'Cloud bootstrap timed out. Loaded local cache only.',
+            );
+          }
+        } catch (caughtError) {
         if (!isConnectivityIssue(caughtError)) {
           throw caughtError;
         }
@@ -628,35 +840,50 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
 
         return;
       }
-      if (!result) {
-        return;
-      }
+        if (!result) {
+          return;
+        }
 
-      const sourceStoreId = state.activeStoreId ?? `guest-store-${state.guestDeviceId}`;
-      const pendingCount = await transactionRepository.countPendingTransactionsForStore(sourceStoreId);
-      const ownerMismatch =
-        userId !== null &&
-        state.migrationOwnerUserId !== null &&
-        state.migrationOwnerUserId !== userId &&
-        pendingCount > 0;
+        const ownerMismatch =
+          userId !== null &&
+          state.migrationOwnerUserId !== null &&
+          state.migrationOwnerUserId !== userId &&
+          pendingCount > 0;
 
-      if (ownerMismatch) {
-        await appStateRepository.updateState({
-          pendingClaimOwnerUserId: userId,
+        if (ownerMismatch) {
+          await appStateRepository.updateState({
+            pendingClaimOwnerUserId: userId,
           migrationStatus: 'failed',
           lastMigrationError: 'Local guest data is linked to another account. Choose claim or discard.',
         });
         setAppState(await appStateRepository.getOrCreateState());
-        return;
-      }
+          return;
+        }
 
-      await appStateRepository.updateState({
-        mode: 'authenticated',
-        activeStoreId: result.storeId,
-        migrationOwnerUserId: userId,
-        pendingClaimOwnerUserId: null,
-        lastBootstrapAt: new Date().toISOString(),
-      });
+        if (shouldMigrateGuestData) {
+          await syncGuestCatalogToCloud({
+            targetStoreId: result.storeId,
+            inventoryItems: localSourceInventory,
+            customers: localSourceCustomers,
+          });
+
+          const authenticatedStore = await storeRepository.getStoreById(result.storeId);
+          if (authenticatedStore) {
+            await migrateLocalStoreData({
+              sourceStoreId,
+              targetStore: authenticatedStore,
+            });
+          }
+        }
+
+        await appStateRepository.updateState({
+          mode: 'authenticated',
+          activeStoreId: result.storeId,
+          guestConverted: shouldMigrateGuestData || state.guestConverted,
+          migrationOwnerUserId: userId,
+          pendingClaimOwnerUserId: null,
+          lastBootstrapAt: new Date().toISOString(),
+        });
 
       const pendingTransactions = await transactionRepository.listPendingTransactionsForStore(sourceStoreId, 25);
       if (pendingTransactions.length > 0) {
@@ -724,7 +951,7 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, loadCachedData, reloadStoreData]);
+    }, [isAuthenticated, loadCachedData, migrateLocalStoreData, reloadStoreData]);
 
   useEffect(() => {
     void refresh();
@@ -748,30 +975,32 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
       applyManualAdjustment,
       submitFallbackCommand,
       createLocalCustomer,
-      submitAssistantQuestion,
-      renameLocalStore,
-      resolvePendingClaim,
-    }),
-    [
-      appState,
-      applyManualAdjustment,
-      assistantInteractions,
+        submitAssistantQuestion,
+        renameLocalStore,
+        resolvePendingClaim,
+        createLocalInventoryItem,
+      }),
+      [
+        appState,
+        applyManualAdjustment,
+        assistantInteractions,
       confirmLocalCommand,
       customers,
       error,
       syncNotice,
-      inventoryItems,
-      isLoading,
-      recentTransactions,
-      refresh,
-      renameLocalStore,
-      resolvePendingClaim,
-      store,
-      createLocalCustomer,
-      submitFallbackCommand,
-      submitAssistantQuestion,
-      submitLocalCommand,
-    ],
+        inventoryItems,
+        isLoading,
+        recentTransactions,
+        refresh,
+        renameLocalStore,
+        resolvePendingClaim,
+        store,
+        createLocalInventoryItem,
+        createLocalCustomer,
+        submitFallbackCommand,
+        submitAssistantQuestion,
+        submitLocalCommand,
+      ],
   );
 
   return <LocalDataContext.Provider value={value}>{children}</LocalDataContext.Provider>;

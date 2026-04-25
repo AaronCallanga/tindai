@@ -45,7 +45,7 @@ describe('POST /api/v1/assistant/query', () => {
       clientInteractionId: 'assistant-1',
       status: 'answered',
       answerText: 'Coke Mismo ang pinaka-fast moving today.',
-      spokenText: null,
+      spokenText: 'Coke Mismo ang pinaka-fast moving today.',
       actions: [],
     });
 
@@ -70,7 +70,7 @@ describe('POST /api/v1/assistant/query', () => {
       clientInteractionId: 'assistant-1',
       status: 'answered',
       answerText: 'Coke Mismo ang pinaka-fast moving today.',
-      spokenText: null,
+      spokenText: 'Coke Mismo ang pinaka-fast moving today.',
       actions: [],
     });
   });

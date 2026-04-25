@@ -108,10 +108,10 @@ export function ProfileScreen() {
             <Text style={styles.ctaTitle}>Connect an account</Text>
             <Text style={styles.ctaBody}>Log in or create an account when you want this device to sync with your store online.</Text>
             <View style={styles.ctaActions}>
-              <Pressable style={styles.secondaryButton} onPress={showLogin}>
+              <Pressable style={styles.secondaryButton} onPress={() => void showLogin()}>
                 <Text style={styles.secondaryButtonLabel}>Log in</Text>
               </Pressable>
-              <Pressable style={styles.primaryButton} onPress={showSignUp}>
+              <Pressable style={styles.primaryButton} onPress={() => void showSignUp()}>
                 <Text style={styles.primaryButtonLabel}>Create account</Text>
               </Pressable>
             </View>
