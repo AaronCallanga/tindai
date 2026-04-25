@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -7,6 +9,17 @@ export default function Home() {
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-xs">✦</span>
             Tindai
           </div>
+          <nav className="hidden items-center gap-8 text-sm text-slate-600 md:flex">
+            <a className="font-semibold text-emerald-700 underline underline-offset-8" href="#">
+              Home
+            </a>
+            <a href="#">Features</a>
+            <Link href="/paano-gamitin" className="transition hover:text-emerald-800">
+              Paano Gamitin
+            </Link>
+            <a href="#">Pricing</a>
+          </nav>
+          <button className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white">Get App</button>
         </header>
 
         <section className="grid min-h-[calc(100vh-72px)] items-center gap-10 py-6 md:grid-cols-2 md:py-10">
@@ -28,12 +41,12 @@ export default function Home() {
               >
                 Subukan nang Libre
               </a>
-              <a
-                href="#"
+              <Link
+                href="/paano-gamitin"
                 className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
               >
-                Pano Gumagana (1 min)
-              </a>
+                Paano Gamitin
+              </Link>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
