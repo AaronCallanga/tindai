@@ -1,6 +1,14 @@
 import Fuse from 'fuse.js';
 
+import { getEnv } from '../config/env';
 import { getSupabaseAdminClient } from '../config/supabase';
+import {
+  buildReceiptParseFallbackPrompt,
+  buildReceiptNameEnrichmentPrompt,
+  validateGeminiReceiptParseFallbackResponse,
+  validateGeminiReceiptNameEnrichmentResponse,
+} from '../services/gemini-receipt-enrichment';
+import { generateGeminiText } from '../services/gemini.service';
 import { getStoreByOwnerId } from './store.model';
 
 export type ReceiptOcrBlockInput = {
@@ -38,17 +46,21 @@ export type ParseReceiptInput = {
 export type ParsedReceiptItem = {
   receiptItemId: string;
   rawName: string;
+  displayName: string;
   normalizedName: string;
   quantity: number;
   unitPrice: number | null;
   lineTotal: number | null;
   parserConfidence: number;
+  nameSource: 'ocr' | 'gemini';
+  nameConfidence: number | null;
   status: 'PARSED';
 };
 
 export type ParseReceiptResult = {
   receiptId: string;
   status: 'PARSED';
+  nameEnrichmentStatus: 'local_only' | 'gemini_enriched' | 'fallback_local' | 'gemini_fallback';
   merchantName: string | null;
   receiptDate: string | null;
   subtotalAmount: number | null;
@@ -60,11 +72,14 @@ export type ParseReceiptResult = {
 export type MatchReceiptInputItem = {
   receiptItemId: string;
   rawName: string;
+  displayName?: string;
   normalizedName?: string;
   quantity?: number;
   unitPrice?: number | null;
   lineTotal?: number | null;
   parserConfidence?: number;
+  nameSource?: 'ocr' | 'gemini';
+  nameConfidence?: number | null;
   status?: 'PARSED';
 };
 
@@ -77,11 +92,14 @@ export type MatchStatus = 'HIGH_CONFIDENCE' | 'NEEDS_REVIEW' | 'UNMATCHED';
 export type MatchReceiptResultItem = {
   receiptItemId: string;
   rawName: string;
+  displayName: string;
   normalizedName: string;
   quantity: number | null;
   unitPrice: number | null;
   lineTotal: number | null;
   parserConfidence: number | null;
+  nameSource: 'ocr' | 'gemini';
+  nameConfidence: number | null;
   matchStatus: MatchStatus;
   matchScore: number | null;
   suggestedProductId: string | null;
@@ -117,6 +135,47 @@ const RECEIPT_NOISE_WORDS = [
   'amount due',
 ];
 
+const GEMINI_RECEIPT_NAME_ENRICHMENT_SCHEMA = {
+  type: 'OBJECT',
+  required: ['items'],
+  properties: {
+    items: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        required: ['receiptItemId', 'displayName', 'confidence'],
+        properties: {
+          receiptItemId: { type: 'STRING' },
+          displayName: { type: 'STRING' },
+          confidence: { type: 'NUMBER' },
+        },
+      },
+    },
+  },
+} as const;
+
+const GEMINI_RECEIPT_PARSE_FALLBACK_SCHEMA = {
+  type: 'OBJECT',
+  required: ['items'],
+  properties: {
+    items: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        required: ['rawName', 'displayName', 'quantity', 'confidence'],
+        properties: {
+          rawName: { type: 'STRING' },
+          displayName: { type: 'STRING' },
+          quantity: { type: 'NUMBER' },
+          unitPrice: { type: 'NUMBER', nullable: true },
+          lineTotal: { type: 'NUMBER', nullable: true },
+          confidence: { type: 'NUMBER' },
+        },
+      },
+    },
+  },
+} as const;
+
 export function normalizeOcrText(rawText: string) {
   return rawText.replace(/\s+/g, ' ').trim();
 }
@@ -130,8 +189,25 @@ export function normalizeReceiptText(input: string) {
     .trim();
 }
 
+function normalizeReceiptCode(input: string) {
+  return input.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 type InventoryMatchRecord = {
   id: string;
+  name: string;
+  sku: string | null;
+  aliases: string[] | null;
+};
+
+type ReceiptProductDictionaryRecord = {
+  code: string;
+  name: string;
+  category: string | null;
+  unit: string | null;
+};
+
+type ReceiptEnrichmentInventoryRecord = {
   name: string;
   sku: string | null;
   aliases: string[] | null;
@@ -145,6 +221,14 @@ type ReceiptMatchCandidate = {
   searchName: string;
   searchSku: string;
   searchAliases: string[];
+};
+
+type ReceiptDictionaryCandidate = {
+  code: string;
+  name: string;
+  normalizedCode: string;
+  normalizedName: string;
+  normalizedNameCompact: string;
 };
 
 export function isValidReceiptOcrInput(value: unknown): value is ProcessReceiptOcrInput {
@@ -250,7 +334,18 @@ function splitReceiptLines(rawText: string) {
 }
 
 function parseAmount(rawAmount: string) {
-  const normalized = rawAmount.replace(/,/g, '');
+  const compact = rawAmount.replace(/\s+/g, '');
+  const hasComma = compact.includes(',');
+  const hasDot = compact.includes('.');
+
+  let normalized = compact;
+  if (hasComma && !hasDot) {
+    // OCR can return comma decimals (e.g. 81,44). Treat that as decimal, not thousands.
+    normalized = compact.replace(',', '.');
+  } else {
+    normalized = compact.replace(/,/g, '');
+  }
+
   const value = Number.parseFloat(normalized);
   return Number.isFinite(value) ? Number(value.toFixed(2)) : null;
 }
@@ -359,13 +454,267 @@ function createParsedItem(receiptId: string, index: number, rawName: string, qua
   return {
     receiptItemId: `${receiptId}-item-${index + 1}`,
     rawName: rawName.trim(),
+    displayName: rawName.trim(),
     normalizedName: normalizeReceiptText(rawName),
     quantity: Number(quantity.toFixed(3)),
     unitPrice,
     lineTotal,
     parserConfidence,
+    nameSource: 'ocr',
+    nameConfidence: null,
     status: 'PARSED',
   };
+}
+
+function createGeminiParsedItem(
+  receiptId: string,
+  index: number,
+  rawName: string,
+  displayName: string,
+  quantity: number,
+  unitPrice: number | null,
+  lineTotal: number | null,
+  confidence: number,
+): ParsedReceiptItem {
+  const cleanedRawName = rawName.replace(/\s+/g, ' ').trim();
+  const cleanedDisplayName = displayName.replace(/\s+/g, ' ').trim();
+
+  return {
+    receiptItemId: `${receiptId}-item-${index + 1}`,
+    rawName: cleanedRawName,
+    displayName: cleanedDisplayName || cleanedRawName,
+    normalizedName: normalizeReceiptText(cleanedDisplayName || cleanedRawName),
+    quantity: Number(quantity.toFixed(3)),
+    unitPrice: unitPrice === null ? null : Number(unitPrice.toFixed(2)),
+    lineTotal: lineTotal === null ? null : Number(lineTotal.toFixed(2)),
+    parserConfidence: Number(confidence.toFixed(3)),
+    nameSource: 'gemini',
+    nameConfidence: Number(confidence.toFixed(3)),
+    status: 'PARSED',
+  };
+}
+
+function looksLikeProductName(rawName: string) {
+  const compact = rawName.replace(/\s+/g, ' ').trim();
+  if (compact.length < 3) {
+    return false;
+  }
+
+  const letterCount = (compact.match(/[a-z]/gi) ?? []).length;
+  if (letterCount < 2) {
+    return false;
+  }
+
+  const tokens = compact.split(' ').filter(Boolean);
+  if (tokens.length > 0 && tokens.every((token) => token.length <= 1)) {
+    return false;
+  }
+
+  return true;
+}
+
+function stripReceiptCountSuffix(value: string) {
+  return value
+    .replace(/\/\d+\b/g, ' ')
+    .replace(/\b\d+\s*(pcs?|pc|packs?|boxes?|bottles?|sachets?|cans?|rolls?|bars?|bags?|trays?)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildReceiptDictionaryCandidates(records: ReceiptProductDictionaryRecord[]): ReceiptDictionaryCandidate[] {
+  return records.map((record) => ({
+    code: record.code,
+    name: record.name,
+    normalizedCode: normalizeReceiptCode(record.code),
+    normalizedName: normalizeReceiptText(record.name),
+    normalizedNameCompact: normalizeReceiptCode(record.name),
+  }));
+}
+
+function buildReceiptDictionarySearchTerms(rawName: string, displayName?: string) {
+  const values = [rawName, displayName]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.replace(/\s+/g, ' ').trim());
+  const textTerms = new Set<string>();
+  const codeTerms = new Set<string>();
+
+  for (const value of values) {
+    const stripped = stripReceiptCountSuffix(value);
+
+    for (const candidate of [value, stripped]) {
+      const normalizedText = normalizeReceiptText(candidate);
+      const normalizedCode = normalizeReceiptCode(candidate);
+
+      if (normalizedText) {
+        textTerms.add(normalizedText);
+      }
+
+      if (normalizedCode) {
+        codeTerms.add(normalizedCode);
+      }
+
+      const tokens = candidate.split(/[^a-z0-9]+/i).filter(Boolean);
+      for (const token of tokens) {
+        const normalizedToken = normalizeReceiptCode(token);
+        if (normalizedToken.length >= 5) {
+          codeTerms.add(normalizedToken);
+          textTerms.add(normalizedToken);
+        }
+      }
+    }
+  }
+
+  return {
+    textTerms: [...textTerms],
+    codeTerms: [...codeTerms],
+  };
+}
+
+function findReceiptDictionaryMatch(
+  rawName: string,
+  displayName: string | undefined,
+  candidates: ReceiptDictionaryCandidate[],
+) {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const { textTerms, codeTerms } = buildReceiptDictionarySearchTerms(rawName, displayName);
+  const byNormalizedCode = new Map(candidates.map((candidate) => [candidate.normalizedCode, candidate]));
+  const byNormalizedName = new Map(candidates.map((candidate) => [candidate.normalizedName, candidate]));
+  const byNormalizedNameCompact = new Map(candidates.map((candidate) => [candidate.normalizedNameCompact, candidate]));
+
+  for (const term of codeTerms) {
+    const directCode = byNormalizedCode.get(term);
+    if (directCode) {
+      return directCode;
+    }
+
+    const directNameCompact = byNormalizedNameCompact.get(term);
+    if (directNameCompact) {
+      return directNameCompact;
+    }
+  }
+
+  for (const term of textTerms) {
+    const directName = byNormalizedName.get(term);
+    if (directName) {
+      return directName;
+    }
+
+    const compactName = byNormalizedNameCompact.get(normalizeReceiptCode(term));
+    if (compactName) {
+      return compactName;
+    }
+  }
+
+  let containsMatch: { candidate: ReceiptDictionaryCandidate; score: number } | null = null;
+
+  for (const term of codeTerms) {
+    if (term.length < 5) {
+      continue;
+    }
+
+    for (const candidate of candidates) {
+      if (
+        candidate.normalizedCode.includes(term) ||
+        term.includes(candidate.normalizedCode) ||
+        candidate.normalizedNameCompact.includes(term) ||
+        term.includes(candidate.normalizedNameCompact)
+      ) {
+        const score = Math.abs(candidate.normalizedCode.length - term.length);
+        if (!containsMatch || score < containsMatch.score) {
+          containsMatch = { candidate, score };
+        }
+      }
+    }
+  }
+
+  if (containsMatch) {
+    return containsMatch.candidate;
+  }
+
+  const fuse = new Fuse(candidates, {
+    includeScore: true,
+    threshold: looksLikeAbbreviatedReceiptName(rawName) ? 0.28 : 0.18,
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+    keys: [
+      { name: 'normalizedCode', weight: 0.45 },
+      { name: 'normalizedName', weight: 0.35 },
+      { name: 'normalizedNameCompact', weight: 0.2 },
+    ],
+  });
+
+  const fuseQueries = [...codeTerms, ...textTerms].filter((term) => term.length >= 3);
+  for (const query of fuseQueries) {
+    const result = fuse.search(query, { limit: 1 })[0];
+    if (result?.item && typeof result.score === 'number') {
+      const threshold = looksLikeAbbreviatedReceiptName(rawName) ? 0.28 : 0.18;
+      if (result.score <= threshold) {
+        return result.item;
+      }
+    }
+  }
+
+  return null;
+}
+
+export function standardizeParsedReceiptResultWithDictionary(
+  result: ParseReceiptResult,
+  dictionaryRecords: ReceiptProductDictionaryRecord[],
+): ParseReceiptResult {
+  const candidates = buildReceiptDictionaryCandidates(dictionaryRecords);
+  if (candidates.length === 0) {
+    return result;
+  }
+
+  return {
+    ...result,
+    items: result.items.map((item) => {
+      if (item.nameSource === 'gemini' && typeof item.nameConfidence === 'number' && item.nameConfidence >= 0.85) {
+        return item;
+      }
+
+      const dictionaryMatch = findReceiptDictionaryMatch(item.rawName, item.displayName, candidates);
+      if (!dictionaryMatch) {
+        return item;
+      }
+
+      return {
+        ...item,
+        displayName: dictionaryMatch.name,
+        normalizedName: normalizeReceiptText(dictionaryMatch.name),
+      };
+    }),
+  };
+}
+
+export function standardizeMatchReceiptInputItemsWithDictionary(
+  items: MatchReceiptInputItem[],
+  dictionaryRecords: ReceiptProductDictionaryRecord[],
+): MatchReceiptInputItem[] {
+  const candidates = buildReceiptDictionaryCandidates(dictionaryRecords);
+  if (candidates.length === 0) {
+    return items;
+  }
+
+  return items.map((item) => {
+    if (item.nameSource === 'gemini' && typeof item.nameConfidence === 'number' && item.nameConfidence >= 0.85) {
+      return item;
+    }
+
+    const dictionaryMatch = findReceiptDictionaryMatch(item.rawName, item.displayName, candidates);
+    if (!dictionaryMatch) {
+      return item;
+    }
+
+    return {
+      ...item,
+      displayName: dictionaryMatch.name,
+      normalizedName: normalizeReceiptText(dictionaryMatch.name),
+    };
+  });
 }
 
 function buildReceiptMatchCandidates(items: InventoryMatchRecord[]): ReceiptMatchCandidate[] {
@@ -378,6 +727,151 @@ function buildReceiptMatchCandidates(items: InventoryMatchRecord[]): ReceiptMatc
     searchSku: normalizeReceiptText(item.sku ?? ''),
     searchAliases: (item.aliases ?? []).map((alias) => normalizeReceiptText(alias)).filter(Boolean),
   }));
+}
+
+function looksLikeAbbreviatedReceiptName(value: string) {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return false;
+  }
+
+  const tokens = compact.split(' ').filter(Boolean);
+  const shortWordCount = tokens.filter((token) => {
+    const lettersOnly = token.replace(/[^a-z]/gi, '');
+    return lettersOnly.length > 0 && lettersOnly.length <= 3;
+  }).length;
+  const digitOrSlashSignal = /[\d/]/.test(compact);
+  const uppercaseTokenCount = tokens.filter((token) => /[A-Z]/.test(token) && token === token.toUpperCase()).length;
+
+  return digitOrSlashSignal || shortWordCount >= 2 || uppercaseTokenCount >= 2;
+}
+
+export function shouldAttemptGeminiReceiptEnrichment(items: ParsedReceiptItem[]) {
+  return items.some((item) => looksLikeAbbreviatedReceiptName(item.rawName));
+}
+
+export function mergeGeminiReceiptNames(
+  result: ParseReceiptResult,
+  enrichment: {
+    items: Array<{
+      receiptItemId: string;
+      displayName: string;
+      confidence: number;
+    }>;
+  },
+): ParseReceiptResult {
+  const enrichmentById = new Map(enrichment.items.map((item) => [item.receiptItemId, item]));
+
+  let applied = false;
+  const items = result.items.map((item) => {
+    const candidate = enrichmentById.get(item.receiptItemId);
+    if (!candidate || candidate.confidence < 0.72) {
+      return item;
+    }
+
+    const displayName = candidate.displayName.replace(/\s+/g, ' ').trim();
+    if (!displayName) {
+      return item;
+    }
+
+    const normalizedName = normalizeReceiptText(displayName);
+    if (!normalizedName) {
+      return item;
+    }
+
+    const normalizedRawName = normalizeReceiptText(item.rawName);
+    if (normalizedName === normalizedRawName) {
+      return item;
+    }
+
+    applied = true;
+    return {
+      ...item,
+      displayName,
+      normalizedName,
+      nameSource: 'gemini' as const,
+      nameConfidence: Number(candidate.confidence.toFixed(3)),
+    };
+  });
+
+  return {
+    ...result,
+    nameEnrichmentStatus: applied ? 'gemini_enriched' : result.nameEnrichmentStatus,
+    items,
+  };
+}
+
+function mergeGeminiFallbackItems(
+  localResult: ParseReceiptResult,
+  receiptId: string,
+  fallback: {
+    items: Array<{
+      rawName: string;
+      displayName: string;
+      quantity: number;
+      unitPrice: number | null;
+      lineTotal: number | null;
+      confidence: number;
+    }>;
+  },
+): ParseReceiptResult {
+  const items = fallback.items
+    .filter((item) => item.confidence >= 0.6)
+    .map((item, index) =>
+      createGeminiParsedItem(
+        receiptId,
+        index,
+        item.rawName,
+        item.displayName,
+        item.quantity,
+        item.unitPrice,
+        item.lineTotal,
+        item.confidence,
+      ),
+    )
+    .filter((item) => item.normalizedName.length > 0 && looksLikeProductName(item.displayName));
+
+  if (items.length === 0) {
+    return {
+      ...localResult,
+      nameEnrichmentStatus: 'fallback_local',
+    };
+  }
+
+  return {
+    ...localResult,
+    nameEnrichmentStatus: 'gemini_fallback',
+    items,
+  };
+}
+
+function buildStrictJsonRetryPrompt(prompt: string) {
+  return `${prompt}
+
+IMPORTANT:
+- Reply with JSON only.
+- Do not include any intro text.
+- Do not include markdown fences.
+- Do not explain the answer.
+- Do not say "Here is the JSON".
+- Do not include any words before the opening brace.
+- Your response is passed directly to JSON.parse().
+- Any extra text will cause the response to be rejected.
+- Start with { and end with }.`.trim();
+}
+
+async function loadReceiptProductDictionary() {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('receipt_products')
+    .select('code, name, category, unit')
+    .returns<ReceiptProductDictionaryRecord[]>();
+
+  if (error) {
+    throw new Error('Unable to load centralized receipt product dictionary.');
+  }
+
+  return data ?? [];
 }
 
 function createReceiptFuseIndex(candidates: ReceiptMatchCandidate[]) {
@@ -427,7 +921,8 @@ export function matchReceiptItemsAgainstCatalog(
     receiptId,
     status: 'MATCHED',
     items: items.map((item) => {
-      const normalizedName = normalizeReceiptText(item.normalizedName?.trim() || item.rawName);
+      const displayName = item.displayName?.trim() || item.rawName.trim();
+      const normalizedName = normalizeReceiptText(item.normalizedName?.trim() || displayName || item.rawName);
       const result = normalizedName ? fuse.search(normalizedName, { limit: 1 })[0] : undefined;
       const score = typeof result?.score === 'number' ? Number(result.score.toFixed(5)) : null;
       const matchStatus = getMatchStatus(score);
@@ -436,11 +931,14 @@ export function matchReceiptItemsAgainstCatalog(
       return {
         receiptItemId: item.receiptItemId,
         rawName: item.rawName,
+        displayName,
         normalizedName,
         quantity: typeof item.quantity === 'number' ? item.quantity : null,
         unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : null,
         lineTotal: typeof item.lineTotal === 'number' ? item.lineTotal : null,
         parserConfidence: typeof item.parserConfidence === 'number' ? item.parserConfidence : null,
+        nameSource: item.nameSource === 'gemini' ? 'gemini' : 'ocr',
+        nameConfidence: typeof item.nameConfidence === 'number' ? item.nameConfidence : null,
         matchStatus,
         matchScore: score,
         suggestedProductId: candidate?.productId ?? null,
@@ -457,31 +955,31 @@ function parseCandidateLineItem(line: string, receiptId: string, index: number):
     return null;
   }
 
-  let match = line.match(/^(.*?)(?:\s{1,}|\s*-\s*)(\d+(?:\.\d+)?)\s*[x@]\s*(\d[\d,]*\.\d{2})$/i);
+  let match = line.match(/^(.*?)(?:\s{1,}|\s*-\s*)(\d+(?:[.,]\d+)?)\s*[x@]\s*(\d[\d,.]*[.,]\d{2})$/i);
   if (match) {
     const rawName = match[1].trim();
     const quantity = Number.parseFloat(match[2]);
     const unitPrice = parseAmount(match[3]);
-    if (rawName && quantity > 0 && unitPrice !== null) {
+    if (looksLikeProductName(rawName) && quantity > 0 && unitPrice !== null) {
       return createParsedItem(receiptId, index, rawName, quantity, unitPrice, Number((quantity * unitPrice).toFixed(2)), 0.93);
     }
   }
 
-  match = line.match(/^(.*?)(?:\s{1,}|\s*-\s*)(\d+(?:\.\d+)?)\s+(\d[\d,]*\.\d{2})$/i);
+  match = line.match(/^(.*?)(?:\s{1,}|\s*-\s*)(\d+(?:[.,]\d+)?)\s+(\d[\d,.]*[.,]\d{2})$/i);
   if (match) {
     const rawName = match[1].trim();
     const quantity = Number.parseFloat(match[2]);
     const unitPrice = parseAmount(match[3]);
-    if (rawName && quantity > 0 && unitPrice !== null) {
+    if (looksLikeProductName(rawName) && quantity > 0 && unitPrice !== null) {
       return createParsedItem(receiptId, index, rawName, quantity, unitPrice, Number((quantity * unitPrice).toFixed(2)), 0.84);
     }
   }
 
-  match = line.match(/^(.*?)(?:\s{1,}|\s*-\s*)(\d[\d,]*\.\d{2})$/i);
+  match = line.match(/^(.*?)(?:\s{1,}|\s*-\s*)(\d[\d,.]*[.,]\d{2})$/i);
   if (match) {
     const rawName = match[1].trim();
     const lineTotal = parseAmount(match[2]);
-    if (rawName && lineTotal !== null) {
+    if (looksLikeProductName(rawName) && lineTotal !== null) {
       return createParsedItem(receiptId, index, rawName, 1, lineTotal, lineTotal, 0.68);
     }
   }
@@ -489,34 +987,266 @@ function parseCandidateLineItem(line: string, receiptId: string, index: number):
   return null;
 }
 
+function parseNumericReceiptDetailLine(line: string) {
+  const matches = Array.from(line.matchAll(/(\d[\d,.]*[.,]\d{2})/g)).map((match) => match[1]);
+  if (matches.length < 2) {
+    return null;
+  }
+
+  const quantity = parseAmount(matches[0]);
+  const unitPrice = parseAmount(matches[1]);
+  const lineTotal = parseAmount(matches[matches.length - 1]);
+  if (quantity === null || unitPrice === null || lineTotal === null || quantity <= 0) {
+    return null;
+  }
+
+  return {
+    quantity,
+    unitPrice,
+    lineTotal,
+  };
+}
+
+function parseTwoLineReceiptItems(lines: string[], receiptId: string) {
+  const items: ParsedReceiptItem[] = [];
+  const consumedLineIndexes = new Set<number>();
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const nameLine = lines[index];
+    const detailLine = lines[index + 1];
+
+    if (consumedLineIndexes.has(index) || consumedLineIndexes.has(index + 1)) {
+      continue;
+    }
+
+    if (!/[a-z]/i.test(nameLine) || isNoiseLine(nameLine) || /\d[\d,.]*[.,]\d{2}/.test(nameLine)) {
+      continue;
+    }
+
+    const numericDetail = parseNumericReceiptDetailLine(detailLine);
+    if (!numericDetail || !looksLikeProductName(nameLine)) {
+      continue;
+    }
+
+    items.push(
+      createParsedItem(
+        receiptId,
+        index,
+        nameLine,
+        numericDetail.quantity,
+        numericDetail.unitPrice,
+        numericDetail.lineTotal,
+        0.82,
+      ),
+    );
+    consumedLineIndexes.add(index);
+    consumedLineIndexes.add(index + 1);
+  }
+
+  return {
+    items,
+    consumedLineIndexes,
+  };
+}
+
 export function parseReceiptText(receiptId: string, rawText: string): ParseReceiptResult {
   const lines = splitReceiptLines(rawText);
   const merchantName = extractMerchantName(lines);
   const receiptDate = parseReceiptDate(rawText);
   const { subtotalAmount, taxAmount, totalAmount } = extractSummaryAmounts(lines);
+  const twoLineItems = parseTwoLineReceiptItems(lines, receiptId);
 
   const items = lines
-    .map((line, index) => parseCandidateLineItem(line, receiptId, index))
+    .map((line, index) => {
+      if (twoLineItems.consumedLineIndexes.has(index)) {
+        return null;
+      }
+
+      return parseCandidateLineItem(line, receiptId, index);
+    })
     .filter((item): item is ParsedReceiptItem => item !== null && item.normalizedName.length > 0);
+
+  const mergedItems = [...twoLineItems.items, ...items].sort((left, right) =>
+    left.receiptItemId.localeCompare(right.receiptItemId),
+  );
 
   return {
     receiptId,
     status: 'PARSED',
+    nameEnrichmentStatus: 'local_only',
     merchantName,
     receiptDate,
     subtotalAmount,
     taxAmount,
     totalAmount,
-    items,
+    items: mergedItems,
   };
 }
 
 export async function parseReceiptForOwner(
-  _ownerId: string,
+  ownerId: string,
   receiptId: string,
   input: ParseReceiptInput,
 ): Promise<ParseReceiptResult> {
-  return parseReceiptText(receiptId, input.rawText);
+  let localResult = parseReceiptText(receiptId, input.rawText);
+  const env = getEnv();
+  let dictionaryRecords: ReceiptProductDictionaryRecord[] = [];
+
+  try {
+    dictionaryRecords = await loadReceiptProductDictionary();
+    localResult = standardizeParsedReceiptResultWithDictionary(localResult, dictionaryRecords);
+  } catch (error) {
+    console.warn('[receipt] dictionary standardization skipped during parse', error);
+  }
+
+  if (!env.GEMINI_API_KEY) {
+    return localResult;
+  }
+
+  try {
+    const store = await getStoreByOwnerId(ownerId);
+    if (!store) {
+      return {
+        ...localResult,
+        nameEnrichmentStatus: 'fallback_local',
+      };
+    }
+
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select('name, sku, aliases')
+      .eq('store_id', store.id)
+      .eq('is_active', true)
+      .is('archived_at', null)
+      .returns<ReceiptEnrichmentInventoryRecord[]>();
+
+    if (error) {
+      throw new Error('Unable to load store inventory for receipt enrichment.');
+    }
+
+    const inventoryItems = (data ?? []).map((item) => ({
+      name: item.name,
+      sku: item.sku,
+      aliases: item.aliases ?? [],
+    }));
+
+    if (localResult.items.length === 0) {
+      const fallbackPrompt = buildReceiptParseFallbackPrompt({
+        rawText: input.rawText,
+        inventoryItems,
+      });
+      const fallbackResponse = await generateGeminiText(fallbackPrompt, {
+        responseMimeType: 'application/json',
+        responseSchema: GEMINI_RECEIPT_PARSE_FALLBACK_SCHEMA,
+      });
+      if (!fallbackResponse) {
+        return {
+          ...localResult,
+          nameEnrichmentStatus: 'fallback_local',
+        };
+      }
+
+      let fallback;
+      try {
+        fallback = validateGeminiReceiptParseFallbackResponse(fallbackResponse);
+      } catch {
+        const retryResponse = await generateGeminiText(buildStrictJsonRetryPrompt(fallbackPrompt), {
+          responseMimeType: 'application/json',
+          responseSchema: GEMINI_RECEIPT_PARSE_FALLBACK_SCHEMA,
+        });
+
+        if (!retryResponse) {
+          return {
+            ...localResult,
+            nameEnrichmentStatus: 'fallback_local',
+          };
+        }
+
+        fallback = validateGeminiReceiptParseFallbackResponse(retryResponse);
+      }
+
+      return standardizeParsedReceiptResultWithDictionary(
+        mergeGeminiFallbackItems(
+          {
+            ...localResult,
+            nameEnrichmentStatus: 'fallback_local',
+          },
+          receiptId,
+          fallback,
+        ),
+        dictionaryRecords,
+      );
+    }
+
+    if (!shouldAttemptGeminiReceiptEnrichment(localResult.items)) {
+      return localResult;
+    }
+
+    const prompt = buildReceiptNameEnrichmentPrompt({
+      rawText: input.rawText,
+      parsedItems: localResult.items.map((item) => ({
+        receiptItemId: item.receiptItemId,
+        rawName: item.rawName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+      })),
+      inventoryItems,
+    });
+
+    const geminiResponse = await generateGeminiText(prompt, {
+      responseMimeType: 'application/json',
+      responseSchema: GEMINI_RECEIPT_NAME_ENRICHMENT_SCHEMA,
+    });
+    if (!geminiResponse) {
+      return {
+        ...localResult,
+        nameEnrichmentStatus: 'fallback_local',
+      };
+    }
+
+    let enrichment;
+    try {
+      enrichment = validateGeminiReceiptNameEnrichmentResponse(geminiResponse);
+    } catch {
+      const retryResponse = await generateGeminiText(buildStrictJsonRetryPrompt(prompt), {
+        responseMimeType: 'application/json',
+        responseSchema: GEMINI_RECEIPT_NAME_ENRICHMENT_SCHEMA,
+      });
+
+      if (!retryResponse) {
+        return {
+          ...localResult,
+          nameEnrichmentStatus: 'fallback_local',
+        };
+      }
+
+      enrichment = validateGeminiReceiptNameEnrichmentResponse(retryResponse);
+    }
+
+    return standardizeParsedReceiptResultWithDictionary(
+      mergeGeminiReceiptNames(
+        {
+          ...localResult,
+          nameEnrichmentStatus: 'fallback_local',
+        },
+        enrichment,
+      ),
+      dictionaryRecords,
+    );
+  } catch (error) {
+    if (error instanceof Error) {
+      console.warn(
+        `[receipt] gemini enrichment failed detail=${error.message.slice(0, 240)}`,
+      );
+    }
+    console.warn('[receipt] gemini enrichment failed', error);
+    return {
+      ...localResult,
+      nameEnrichmentStatus: 'fallback_local',
+    };
+  }
 }
 
 export async function matchReceiptForOwner(
@@ -542,5 +1272,15 @@ export async function matchReceiptForOwner(
     throw new Error('Unable to load store inventory for receipt matching.');
   }
 
-  return matchReceiptItemsAgainstCatalog(receiptId, input.items, data ?? []);
+  let standardizedItems = input.items;
+  try {
+    standardizedItems = standardizeMatchReceiptInputItemsWithDictionary(
+      input.items,
+      await loadReceiptProductDictionary(),
+    );
+  } catch (dictionaryError) {
+    console.warn('[receipt] dictionary standardization skipped during match', dictionaryError);
+  }
+
+  return matchReceiptItemsAgainstCatalog(receiptId, standardizedItems, data ?? []);
 }

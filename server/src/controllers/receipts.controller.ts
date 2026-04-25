@@ -89,7 +89,7 @@ export async function parseReceipt(
   );
   const result = await parseReceiptForOwner(user.id, req.params.receiptId, req.body);
   console.info(
-    `[receipt] parse ok userId=${user.id} receiptId=${req.params.receiptId} items=${result.items.length} durationMs=${Date.now() - startedAt}`,
+    `[receipt] parse ok userId=${user.id} receiptId=${req.params.receiptId} items=${result.items.length} nameEnrichment=${result.nameEnrichmentStatus} durationMs=${Date.now() - startedAt}`,
   );
   return res.status(200).json(result);
 }

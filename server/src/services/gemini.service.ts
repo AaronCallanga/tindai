@@ -13,7 +13,13 @@ type GeminiGenerateContentResponse = {
   }>;
 };
 
-export async function generateGeminiText(prompt: string): Promise<string | null> {
+export async function generateGeminiText(
+  prompt: string,
+  options?: {
+    responseMimeType?: 'application/json' | 'text/plain';
+    responseSchema?: Record<string, unknown>;
+  },
+): Promise<string | null> {
   const env = getEnv();
   if (!env.GEMINI_API_KEY) {
     return null;
@@ -36,6 +42,8 @@ export async function generateGeminiText(prompt: string): Promise<string | null>
         generationConfig: {
           temperature: 0.2,
           maxOutputTokens: 180,
+          ...(options?.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
+          ...(options?.responseSchema ? { responseSchema: options.responseSchema } : {}),
         },
       }),
     },

@@ -28,6 +28,7 @@ export type ParseReceiptRequest = {
 export type ParseReceiptResponse = {
   receiptId: string;
   status: 'PARSED';
+  nameEnrichmentStatus: 'local_only' | 'gemini_enriched' | 'fallback_local' | 'gemini_fallback';
   merchantName: string | null;
   receiptDate: string | null;
   subtotalAmount: number | null;

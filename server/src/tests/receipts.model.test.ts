@@ -5,10 +5,14 @@ import {
   isValidMatchReceiptInput,
   isValidParseReceiptInput,
   isValidReceiptOcrInput,
+  mergeGeminiReceiptNames,
   matchReceiptItemsAgainstCatalog,
   normalizeOcrText,
   normalizeReceiptText,
   parseReceiptText,
+  standardizeMatchReceiptInputItemsWithDictionary,
+  standardizeParsedReceiptResultWithDictionary,
+  shouldAttemptGeminiReceiptEnrichment,
 } from '../models/receipts.model';
 
 describe('receipts.model', () => {
@@ -107,6 +111,7 @@ describe('receipts.model', () => {
     expect(result).toMatchObject({
       receiptId: 'receipt-123',
       status: 'PARSED',
+      nameEnrichmentStatus: 'local_only',
       merchantName: 'ABC WHOLESALE',
       receiptDate: '2026-04-25',
       subtotalAmount: 173,
@@ -116,10 +121,12 @@ describe('receipts.model', () => {
     expect(result.items).toHaveLength(2);
     expect(result.items[0]).toMatchObject({
       rawName: 'COKE 1.5L',
+      displayName: 'COKE 1.5L',
       normalizedName: 'coke 1.5l',
       quantity: 2,
       unitPrice: 65,
       lineTotal: 130,
+      nameSource: 'ocr',
       status: 'PARSED',
     });
     expect(result.items[1]).toMatchObject({
@@ -148,6 +155,228 @@ describe('receipts.model', () => {
       quantity: 1,
       unitPrice: 18,
       lineTotal: 18,
+    });
+  });
+
+  it('supports comma decimal amounts and drops weak one-letter item names', () => {
+    const result = parseReceiptText(
+      'receipt-999',
+      [
+        'MERCADO STORE',
+        'I 1 81,44',
+        'Coke mismo 2 21,50',
+        'TOTAL 43,00',
+      ].join('\n'),
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      rawName: 'Coke mismo',
+      displayName: 'Coke mismo',
+      quantity: 2,
+      unitPrice: 21.5,
+      lineTotal: 43,
+    });
+  });
+
+  it('parses two-line POS receipt items with quantity, unit price, and amount on the next line', () => {
+    const result = parseReceiptText(
+      'receipt-pos',
+      [
+        'PTE DC S',
+        'item Qty Price Amount',
+        'Wings Solve Pwd Floral Fresh 60g/150',
+        '150.00 5.85 877.50',
+        'Select Vinegar 200ml/48',
+        '96.00 6.60 633.60',
+        'TOTAL AMOUNT 4,967.70',
+      ].join('\n'),
+    );
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0]).toMatchObject({
+      rawName: 'Wings Solve Pwd Floral Fresh 60g/150',
+      quantity: 150,
+      unitPrice: 5.85,
+      lineTotal: 877.5,
+    });
+    expect(result.items[1]).toMatchObject({
+      rawName: 'Select Vinegar 200ml/48',
+      quantity: 96,
+      unitPrice: 6.6,
+      lineTotal: 633.6,
+    });
+  });
+
+  it('standardizes parsed receipt item names from the centralized receipt dictionary', () => {
+    const standardized = standardizeParsedReceiptResultWithDictionary(
+      {
+        receiptId: 'receipt-dict',
+        status: 'PARSED',
+        nameEnrichmentStatus: 'local_only',
+        merchantName: 'SUPPLIER',
+        receiptDate: null,
+        subtotalAmount: null,
+        taxAmount: null,
+        totalAmount: null,
+        items: [
+          {
+            receiptItemId: 'receipt-dict-item-1',
+            rawName: 'CHSDOG',
+            displayName: 'CHSDOG',
+            normalizedName: 'chsdog',
+            quantity: 1,
+            unitPrice: 212,
+            lineTotal: 212,
+            parserConfidence: 0.7,
+            nameSource: 'ocr',
+            nameConfidence: null,
+            status: 'PARSED',
+          },
+          {
+            receiptItemId: 'receipt-dict-item-2',
+            rawName: 'Select Vinegar 200ml/48',
+            displayName: 'Select Vinegar 200ml/48',
+            normalizedName: 'select vinegar 200ml 48',
+            quantity: 96,
+            unitPrice: 6.6,
+            lineTotal: 633.6,
+            parserConfidence: 0.82,
+            nameSource: 'ocr',
+            nameConfidence: null,
+            status: 'PARSED',
+          },
+        ],
+      },
+      [
+        {
+          code: 'TJCHSDOG1KG',
+          name: 'Tender Juicy Cheese Dog 1kg',
+          category: 'frozen',
+          unit: 'pack',
+        },
+        {
+          code: 'SELVIN200',
+          name: 'Select Vinegar 200ml',
+          category: 'condiments',
+          unit: 'bottle',
+        },
+      ],
+    );
+
+    expect(standardized.items[0]).toMatchObject({
+      rawName: 'CHSDOG',
+      displayName: 'Tender Juicy Cheese Dog 1kg',
+      normalizedName: 'tender juicy cheese dog 1kg',
+    });
+    expect(standardized.items[1]).toMatchObject({
+      rawName: 'Select Vinegar 200ml/48',
+      displayName: 'Select Vinegar 200ml',
+      normalizedName: 'select vinegar 200ml',
+    });
+  });
+
+  it('flags abbreviated receipt names for optional Gemini enrichment', () => {
+    expect(
+      shouldAttemptGeminiReceiptEnrichment([
+        {
+          receiptItemId: 'receipt-1-item-1',
+          rawName: 'Select Soy Sauce 200ml/48',
+          displayName: 'Select Soy Sauce 200ml/48',
+          normalizedName: 'select soy sauce 200ml 48',
+          quantity: 96,
+          unitPrice: 9.4,
+          lineTotal: 902.4,
+          parserConfidence: 0.84,
+          nameSource: 'ocr',
+          nameConfidence: null,
+          status: 'PARSED',
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it('merges confident Gemini display names without losing the original receipt text', () => {
+    const merged = mergeGeminiReceiptNames(
+      {
+        receiptId: 'receipt-1',
+        status: 'PARSED',
+        nameEnrichmentStatus: 'fallback_local',
+        merchantName: 'PTE',
+        receiptDate: null,
+        subtotalAmount: null,
+        taxAmount: null,
+        totalAmount: null,
+        items: [
+          {
+            receiptItemId: 'receipt-1-item-1',
+            rawName: 'Select Vinegar 200ml/48',
+            displayName: 'Select Vinegar 200ml/48',
+            normalizedName: 'select vinegar 200ml 48',
+            quantity: 96,
+            unitPrice: 6.6,
+            lineTotal: 633.6,
+            parserConfidence: 0.84,
+            nameSource: 'ocr',
+            nameConfidence: null,
+            status: 'PARSED',
+          },
+        ],
+      },
+      {
+        items: [
+          {
+            receiptItemId: 'receipt-1-item-1',
+            displayName: 'Select White Vinegar 200ml',
+            confidence: 0.91,
+          },
+        ],
+      },
+    );
+
+    expect(merged.nameEnrichmentStatus).toBe('gemini_enriched');
+    expect(merged.items[0]).toMatchObject({
+      rawName: 'Select Vinegar 200ml/48',
+      displayName: 'Select White Vinegar 200ml',
+      normalizedName: 'select white vinegar 200ml',
+      nameSource: 'gemini',
+      nameConfidence: 0.91,
+    });
+  });
+
+  it('allows gemini fallback parse results to drive clearer matching names', () => {
+    const result = matchReceiptItemsAgainstCatalog(
+      'receipt-790',
+      [
+        {
+          receiptItemId: 'receipt-790-item-1',
+          rawName: 'Wings Solve Pwd Floral Fresh 60g/150',
+          displayName: 'Wings Powder Floral Fresh 60g',
+          normalizedName: 'wings powder floral fresh 60g',
+          quantity: 150,
+          unitPrice: 5.85,
+          lineTotal: 877.5,
+          parserConfidence: 0.87,
+          nameSource: 'gemini',
+          nameConfidence: 0.87,
+        },
+      ],
+      [
+        {
+          id: 'item-5',
+          name: 'Wings Powder Floral Fresh 60g',
+          sku: 'WINGS-60-FLORAL',
+          aliases: ['wings solve pwd floral fresh 60g', 'wings powder floral fresh'],
+        },
+      ],
+    );
+
+    expect(result.items[0]).toMatchObject({
+      rawName: 'Wings Solve Pwd Floral Fresh 60g/150',
+      displayName: 'Wings Powder Floral Fresh 60g',
+      nameSource: 'gemini',
+      matchStatus: 'HIGH_CONFIDENCE',
+      suggestedProductId: 'item-5',
     });
   });
 
@@ -197,6 +426,7 @@ describe('receipts.model', () => {
 
     expect(result.status).toBe('MATCHED');
     expect(result.items[0]).toMatchObject({
+      displayName: 'COKE 1.5L',
       matchStatus: 'HIGH_CONFIDENCE',
       suggestedProductId: 'item-1',
       suggestedProductName: 'Coca-Cola 1.5 Liter',
@@ -209,6 +439,49 @@ describe('receipts.model', () => {
       matchStatus: 'UNMATCHED',
       suggestedProductId: null,
       suggestedProductName: null,
+    });
+  });
+
+  it('standardizes match input items with the centralized receipt dictionary before store matching', () => {
+    const standardizedItems = standardizeMatchReceiptInputItemsWithDictionary(
+      [
+        {
+          receiptItemId: 'receipt-800-item-1',
+          rawName: 'CHSDOG',
+          quantity: 1,
+          unitPrice: 212,
+          lineTotal: 212,
+          parserConfidence: 0.77,
+        },
+      ],
+      [
+        {
+          code: 'TJCHSDOG1KG',
+          name: 'Tender Juicy Cheese Dog 1kg',
+          category: 'frozen',
+          unit: 'pack',
+        },
+      ],
+    );
+
+    const result = matchReceiptItemsAgainstCatalog(
+      'receipt-800',
+      standardizedItems,
+      [
+        {
+          id: 'item-chsdog',
+          name: 'Tender Juicy Cheese Dog 1kg',
+          sku: 'TJCHSDOG1KG',
+          aliases: ['cheese dog', 'tj cheese dog'],
+        },
+      ],
+    );
+
+    expect(result.items[0]).toMatchObject({
+      rawName: 'CHSDOG',
+      displayName: 'Tender Juicy Cheese Dog 1kg',
+      matchStatus: 'HIGH_CONFIDENCE',
+      suggestedProductId: 'item-chsdog',
     });
   });
 });

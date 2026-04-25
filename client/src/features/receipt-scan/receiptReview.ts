@@ -3,22 +3,28 @@ import type { LocalInventoryItem } from '@/features/local-db/types';
 export type ParsedReceiptItem = {
   receiptItemId: string;
   rawName: string;
+  displayName: string;
   normalizedName: string;
   quantity: number;
   unitPrice: number | null;
   lineTotal: number | null;
   parserConfidence: number;
+  nameSource: 'ocr' | 'gemini';
+  nameConfidence: number | null;
   status: 'PARSED';
 };
 
 export type MatchedReceiptItem = {
   receiptItemId: string;
   rawName: string;
+  displayName: string;
   normalizedName: string;
   quantity: number | null;
   unitPrice: number | null;
   lineTotal: number | null;
   parserConfidence: number | null;
+  nameSource: 'ocr' | 'gemini';
+  nameConfidence: number | null;
   matchStatus: 'HIGH_CONFIDENCE' | 'NEEDS_REVIEW' | 'UNMATCHED';
   matchScore: number | null;
   suggestedProductId: string | null;
@@ -30,11 +36,14 @@ export type MatchedReceiptItem = {
 export type ReceiptReviewItemDraft = {
   receiptItemId: string;
   rawName: string;
+  displayName: string;
   normalizedName: string;
   quantityText: string;
   unitPriceText: string;
   lineTotalText: string;
   parserConfidence: number | null;
+  nameSource: 'ocr' | 'gemini';
+  nameConfidence: number | null;
   matchStatus: 'HIGH_CONFIDENCE' | 'NEEDS_REVIEW' | 'UNMATCHED';
   matchScore: number | null;
   selectedProductId: string | null;
@@ -89,11 +98,14 @@ export function createReceiptReviewSession(params: {
     items: params.items.map((item) => ({
       receiptItemId: item.receiptItemId,
       rawName: item.rawName,
+      displayName: item.displayName,
       normalizedName: item.normalizedName,
       quantityText: formatDecimal(item.quantity ?? 1),
       unitPriceText: formatDecimal(item.unitPrice),
       lineTotalText: formatDecimal(item.lineTotal),
       parserConfidence: item.parserConfidence,
+      nameSource: item.nameSource,
+      nameConfidence: item.nameConfidence,
       matchStatus: item.matchStatus,
       matchScore: item.matchScore,
       selectedProductId: item.suggestedProductId,
@@ -101,7 +113,7 @@ export function createReceiptReviewSession(params: {
       selectedProductSku: item.suggestedProductSku,
       matchedAlias: item.matchedAlias,
       resolution: deriveInitialResolution(item),
-      newProductName: item.rawName,
+      newProductName: item.displayName,
       isMatchPickerOpen: false,
       isCreateProductOpen: false,
       matchSearchText: '',

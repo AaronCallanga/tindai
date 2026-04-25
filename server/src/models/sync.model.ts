@@ -172,7 +172,9 @@ export async function verifyTransactionsForOwner(
             })),
             localParse: transaction.localParse,
           });
-          const geminiResponse = await generateGeminiText(prompt);
+          const geminiResponse = await generateGeminiText(prompt, {
+            responseMimeType: 'application/json',
+          });
 
           if (geminiResponse) {
             geminiResult = validateGeminiTransactionResponse(geminiResponse);

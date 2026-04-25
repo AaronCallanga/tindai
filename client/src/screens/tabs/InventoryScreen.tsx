@@ -69,7 +69,7 @@ export function InventoryScreen() {
       ...item,
       isMatchPickerOpen: open,
       isCreateProductOpen: open ? false : item.isCreateProductOpen,
-      matchSearchText: open ? item.matchSearchText || item.rawName : item.matchSearchText,
+      matchSearchText: open ? item.matchSearchText || item.displayName || item.rawName : item.matchSearchText,
       resolution: item.resolution === 'SKIP' && open ? 'UNRESOLVED' : item.resolution,
     }));
   }
@@ -199,7 +199,12 @@ export function InventoryScreen() {
           receiptId: draft.id,
           extraction,
           reviewStatus: 'ready_for_parse',
-          message: 'Ayusin muna ang mga item bago ito ituloy.',
+          message:
+            parsedReceipt.nameEnrichmentStatus === 'gemini_fallback'
+              ? 'Nabuo ang listahan ng item gamit ang internet. Paki-check muna bago ito ituloy.'
+              : parsedReceipt.nameEnrichmentStatus === 'gemini_enriched'
+                ? 'May ilang pangalan ng item na nilinaw dahil may internet. I-check muna bago ito ituloy.'
+                : 'Ayusin muna ang mga item bago ito ituloy.',
         });
       }
 

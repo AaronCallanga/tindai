@@ -33,6 +33,15 @@ function getStatusStyle(item: ReceiptReviewItemDraft) {
   return styles.statusBad;
 }
 
+function getReadableItemName(item: ReceiptReviewItemDraft) {
+  const compact = (item.displayName || item.rawName).replace(/\s+/g, ' ').trim();
+  if (compact.length < 2) {
+    return 'Hindi malinaw na item';
+  }
+
+  return compact;
+}
+
 export function ReceiptReviewPanel({
   review,
   inventoryItems,
@@ -82,14 +91,19 @@ export function ReceiptReviewPanel({
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.itemList}>
         {review.items.map((item) => {
-          const options = filterInventoryMatches(inventoryItems, item.matchSearchText || item.selectedProductName || item.rawName);
+          const options = filterInventoryMatches(
+            inventoryItems,
+            item.matchSearchText || item.selectedProductName || item.displayName || item.rawName,
+          );
 
           return (
             <View key={item.receiptItemId} style={styles.itemCard}>
               <View style={styles.itemHeader}>
                 <View style={styles.itemHeaderBody}>
-                  <Text style={styles.itemTitle}>{item.rawName}</Text>
-                  <Text style={styles.itemMeta}>Nabasa bilang: {item.normalizedName || 'wala pa'}</Text>
+                  <Text style={styles.itemTitle}>{getReadableItemName(item)}</Text>
+                  <Text style={styles.itemMeta}>
+                    {item.displayName.trim() !== item.rawName.trim() ? `Sa resibo: ${item.rawName}` : 'Nakita sa resibo'}
+                  </Text>
                 </View>
                 <View style={[styles.statusChip, getStatusStyle(item)]}>
                   <Text style={styles.statusText}>{getStatusLabel(item)}</Text>
@@ -97,6 +111,7 @@ export function ReceiptReviewPanel({
               </View>
 
               <TextInput
+                accessibilityLabel="Dami"
                 value={item.quantityText}
                 onChangeText={(value) => onUpdateItem(item.receiptItemId, (current) => ({ ...current, quantityText: value }))}
                 keyboardType="decimal-pad"
@@ -104,7 +119,9 @@ export function ReceiptReviewPanel({
                 placeholderTextColor={colors.muted}
                 style={styles.input}
               />
+              <Text style={styles.inputHint}>Dami</Text>
               <TextInput
+                accessibilityLabel="Presyo bawat isa"
                 value={item.unitPriceText}
                 onChangeText={(value) => onUpdateItem(item.receiptItemId, (current) => ({ ...current, unitPriceText: value }))}
                 keyboardType="decimal-pad"
@@ -112,7 +129,9 @@ export function ReceiptReviewPanel({
                 placeholderTextColor={colors.muted}
                 style={styles.input}
               />
+              <Text style={styles.inputHint}>Presyo bawat isa</Text>
               <TextInput
+                accessibilityLabel="Kabuuang presyo"
                 value={item.lineTotalText}
                 onChangeText={(value) => onUpdateItem(item.receiptItemId, (current) => ({ ...current, lineTotalText: value }))}
                 keyboardType="decimal-pad"
@@ -120,6 +139,7 @@ export function ReceiptReviewPanel({
                 placeholderTextColor={colors.muted}
                 style={styles.input}
               />
+              <Text style={styles.inputHint}>Kabuuang presyo</Text>
 
               <View style={styles.selection}>
                 <Text style={styles.selectionTitle}>
@@ -193,7 +213,7 @@ export function ReceiptReviewPanel({
                       onUpdateItem(item.receiptItemId, (current) => ({
                         ...current,
                         resolution: 'CREATE_PRODUCT',
-                        newProductName: current.newProductName.trim() || current.rawName,
+                        newProductName: current.newProductName.trim() || getReadableItemName(current),
                         selectedProductId: null,
                         selectedProductName: null,
                         selectedProductSku: null,
@@ -241,6 +261,7 @@ const styles = StyleSheet.create({
   statusBad: { backgroundColor: '#9b1c12' },
   statusMuted: { backgroundColor: '#6d7a74' },
   input: { minHeight: 44, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: '#ffffff', color: colors.text, paddingHorizontal: 12, fontSize: 14 },
+  inputHint: { color: '#4d5a53', fontSize: 11, fontWeight: '600', marginTop: -6 },
   selection: { borderRadius: 14, backgroundColor: '#f4faf6', borderWidth: 1, borderColor: '#d6ebe1', padding: 12, gap: 3 },
   selectionTitle: { color: colors.primaryDeep, fontSize: 12, fontWeight: '800' },
   selectionMeta: { color: '#4d5a53', fontSize: 12, lineHeight: 18, fontWeight: '600' },

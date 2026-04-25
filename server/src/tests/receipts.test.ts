@@ -128,6 +128,7 @@ describe('POST /api/v1/receipts/:receiptId/parse', () => {
     mockedParseReceiptForOwner.mockResolvedValue({
       receiptId: 'receipt-123',
       status: 'PARSED',
+      nameEnrichmentStatus: 'gemini_enriched',
       merchantName: 'ABC WHOLESALE',
       receiptDate: '2026-04-25',
       subtotalAmount: 130,
@@ -137,11 +138,14 @@ describe('POST /api/v1/receipts/:receiptId/parse', () => {
         {
           receiptItemId: 'receipt-123-item-1',
           rawName: 'COKE 1.5L',
-          normalizedName: 'coke 1.5l',
+          displayName: 'Coca-Cola 1.5 Liter',
+          normalizedName: 'coca cola 1.5 liter',
           quantity: 2,
           unitPrice: 65,
           lineTotal: 130,
           parserConfidence: 0.88,
+          nameSource: 'gemini',
+          nameConfidence: 0.92,
           status: 'PARSED',
         },
       ],
@@ -192,7 +196,10 @@ describe('POST /api/v1/receipts/:receiptId/match', () => {
         {
           receiptItemId: 'receipt-123-item-1',
           rawName: 'COKE 1.5L',
+          displayName: 'Coca-Cola 1.5 Liter',
           normalizedName: 'coke 1.5l',
+          nameSource: 'gemini',
+          nameConfidence: 0.92,
           quantity: 2,
           unitPrice: 65,
           lineTotal: 130,
@@ -215,7 +222,10 @@ describe('POST /api/v1/receipts/:receiptId/match', () => {
           {
             receiptItemId: 'receipt-123-item-1',
             rawName: 'COKE 1.5L',
+            displayName: 'Coca-Cola 1.5 Liter',
             normalizedName: 'coke 1.5l',
+            nameSource: 'gemini',
+            nameConfidence: 0.92,
           },
         ],
       })
@@ -226,7 +236,10 @@ describe('POST /api/v1/receipts/:receiptId/match', () => {
         {
           receiptItemId: 'receipt-123-item-1',
           rawName: 'COKE 1.5L',
+          displayName: 'Coca-Cola 1.5 Liter',
           normalizedName: 'coke 1.5l',
+          nameSource: 'gemini',
+          nameConfidence: 0.92,
         },
       ],
     });

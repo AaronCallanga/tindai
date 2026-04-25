@@ -6,6 +6,8 @@ Tindai needs a receipt scanning workflow that helps a store owner add stock from
 
 This feature is scoped to receipt-driven stock-in only. It does not replace the voice-first inventory loop, full accounting, or supplier management. OCR, parsing, and matching are assistive steps. The backend remains the authority for final persistence and stock changes.
 
+When internet is available, the backend may optionally use Gemini to clarify abbreviated or code-like receipt item names before matching. If that online step is unavailable or low-confidence, the flow must continue with the deterministic local parse instead of blocking the user.
+
 ### Product Principle
 
 ```text
@@ -91,6 +93,8 @@ Backend commits.
   - `2 @ 50.00`
   - `ITEM NAME 2 65.00`
   - `ITEM NAME 130.00`
+- When internet is available, the backend may run an optional Gemini name-enrichment step to turn abbreviated supplier codes into clearer full item names for review and matching.
+- The app must preserve the original OCR item text even when an online-enriched display name is shown.
 
 ### Matching
 
@@ -160,6 +164,7 @@ Take photo or upload receipt
 -> run OCR locally
 -> send image metadata + OCR text to backend
 -> parse candidate receipt fields and line items
+-> optionally clarify abbreviated item names online
 -> fuzzy match items to products and aliases
 -> show review screen
 -> user resolves low-confidence and unmatched items
@@ -351,6 +356,7 @@ Response:
 {
   "receiptId": "f3ceabcc-3d20-4db8-b5d6-777001122334",
   "status": "PARSED",
+  "nameEnrichmentStatus": "gemini_enriched",
   "merchantName": "ABC WHOLESALE",
   "receiptDate": "2026-04-25",
   "totalAmount": 130.00,
@@ -358,10 +364,13 @@ Response:
     {
       "receiptItemId": "4476d1b2-4dd8-4e65-a9e8-111122223333",
       "rawName": "COKE 1.5L",
+      "displayName": "Coca-Cola 1.5 Liter",
       "quantity": 2,
       "unitPrice": 65.00,
       "lineTotal": 130.00,
       "parserConfidence": 0.88,
+      "nameSource": "gemini",
+      "nameConfidence": 0.92,
       "status": "PARSED"
     }
   ]
@@ -697,6 +706,7 @@ Saved alias: COKE 1.5L
 - Duplicate receipt detection using image hash plus merchant and total heuristics.
 - Better parser support for discounts, returns, and bundled items.
 - AI-assisted parse fallback for hard receipts.
+- AI-assisted receipt code expansion for supplier-specific abbreviations.
 - Batch receipt import.
 - Receipt-linked spending analytics.
 
