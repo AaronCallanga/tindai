@@ -50,6 +50,40 @@ type ErrorResponse = {
   message?: string;
 };
 
+function mapReceiptApiError(rawMessage: string | undefined, fallbackMessage: string) {
+  const message = (rawMessage ?? '').toLowerCase();
+
+  if (message.includes('unauthorized') || message.includes('invalid or expired token')) {
+    return 'Kailangan munang mag-login bago iproseso ang resibo.';
+  }
+
+  if (message.includes('invalid receipt match payload')) {
+    return 'Walang malinaw na listahan ng item sa resibo. Subukan ulit ang mas malinaw na kuha.';
+  }
+
+  if (message.includes('invalid receipt parse payload')) {
+    return 'Hindi namin mabasa nang maayos ang laman ng resibo. Subukan ulit ang mas malinaw na kuha.';
+  }
+
+  if (message.includes('invalid receipt ocr payload')) {
+    return 'Hindi maihanda ang laman ng larawan. Subukan ulit kumuha ng mas malinaw na resibo.';
+  }
+
+  if (message.includes('store not found')) {
+    return 'Walang nakahandang tindahan para sa account na ito. Mag-sign in ulit at subukan muli.';
+  }
+
+  if (message.includes('unable to load store inventory for receipt matching')) {
+    return 'Hindi muna makuha ang listahan ng paninda ngayon. Subukan ulit maya-maya.';
+  }
+
+  if (message.includes('network request failed') || message.includes('fetch failed')) {
+    return 'Walang koneksyon sa server ngayon. Suriin ang internet o subukan ulit maya-maya.';
+  }
+
+  return rawMessage ?? fallbackMessage;
+}
+
 export async function sendReceiptOcrToBackend(params: {
   accessToken: string;
   receiptId: string;
@@ -67,7 +101,12 @@ export async function sendReceiptOcrToBackend(params: {
 
   const body = (await response.json().catch(() => null)) as ProcessReceiptOcrResponse | ErrorResponse | null;
   if (!response.ok || !body || !('receiptId' in body)) {
-    throw new Error((body as ErrorResponse | null)?.message ?? 'Hindi naipadala ang nabasang laman ng resibo.');
+    throw new Error(
+      mapReceiptApiError(
+        (body as ErrorResponse | null)?.message,
+        'Hindi naipadala ang nabasang laman ng resibo.',
+      ),
+    );
   }
 
   return body;
@@ -90,7 +129,9 @@ export async function parseReceiptOnBackend(params: {
 
   const body = (await response.json().catch(() => null)) as ParseReceiptResponse | ErrorResponse | null;
   if (!response.ok || !body || !('receiptId' in body)) {
-    throw new Error((body as ErrorResponse | null)?.message ?? 'Hindi maihanda ang detalye ng resibo.');
+    throw new Error(
+      mapReceiptApiError((body as ErrorResponse | null)?.message, 'Hindi maihanda ang detalye ng resibo.'),
+    );
   }
 
   return body;
@@ -113,7 +154,12 @@ export async function matchReceiptOnBackend(params: {
 
   const body = (await response.json().catch(() => null)) as MatchReceiptResponse | ErrorResponse | null;
   if (!response.ok || !body || !('receiptId' in body)) {
-    throw new Error((body as ErrorResponse | null)?.message ?? 'Hindi mahanapan ng tugma ang mga item sa resibo.');
+    throw new Error(
+      mapReceiptApiError(
+        (body as ErrorResponse | null)?.message,
+        'Hindi mahanapan ng tugma ang mga item sa resibo.',
+      ),
+    );
   }
 
   return body;

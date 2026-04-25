@@ -47,7 +47,29 @@ function buildReceiptDraftId() {
 }
 
 export function ensureFileUri(pathOrUri: string) {
-  return pathOrUri.startsWith('file://') ? pathOrUri : `file://${pathOrUri}`;
+  const value = pathOrUri.trim();
+  if (!value) {
+    return value;
+  }
+
+  if (value.startsWith('content://') || value.startsWith('http://') || value.startsWith('https://')) {
+    return value;
+  }
+
+  if (value.startsWith('file://')) {
+    return value;
+  }
+
+  if (value.startsWith('file:/')) {
+    const normalizedPath = value.replace(/^file:\/*/i, '');
+    return `file:///${normalizedPath}`;
+  }
+
+  if (value.startsWith('/')) {
+    return `file://${value}`;
+  }
+
+  return `file:///${value}`;
 }
 
 export function getReceiptTempPath(extension = 'jpg') {
@@ -72,21 +94,32 @@ async function getImageDimensions(uri: string) {
 export async function prepareReceiptImageDraft(input: ReceiptImageInput): Promise<ReceiptImageDraft> {
   await ensureReceiptTempDirectory();
 
-  const outputPath = getReceiptTempPath('jpg');
-  const compressed = await ImageResizer.createResizedImage(
-    input.uri,
-    RECEIPT_MAX_DIMENSION,
-    RECEIPT_MAX_DIMENSION,
-    'JPEG',
-    RECEIPT_JPEG_QUALITY,
-    0,
-    outputPath,
-    false,
-    {
-      mode: 'contain',
-      onlyScaleDown: true,
-    },
-  );
+  let compressed: Awaited<ReturnType<typeof ImageResizer.createResizedImage>>;
+  try {
+    // `react-native-image-resizer` expects outputPath to be a directory, not a file path.
+    compressed = await ImageResizer.createResizedImage(
+      input.uri,
+      RECEIPT_MAX_DIMENSION,
+      RECEIPT_MAX_DIMENSION,
+      'JPEG',
+      RECEIPT_JPEG_QUALITY,
+      0,
+      RECEIPT_TMP_DIR,
+      false,
+      {
+        mode: 'contain',
+        onlyScaleDown: true,
+      },
+    );
+  } catch (error) {
+    const message =
+      typeof error === 'string'
+        ? error
+        : error instanceof Error
+          ? error.message
+          : 'Hindi naihanda ang larawan ng resibo.';
+    throw new Error(`Hindi naihanda ang larawan ng resibo: ${message}`);
+  }
 
   const tempPath = compressed.path;
   const tempUri = ensureFileUri(compressed.uri || compressed.path);

@@ -158,6 +158,17 @@ export function InventoryScreen() {
           },
         });
 
+        if (parsedReceipt.items.length === 0) {
+          setReceiptProcessingState({
+            status: 'weak_text',
+            receiptId: draft.id,
+            extraction,
+            message: 'Hindi namin makita ang malinaw na listahan ng item sa resibo. Subukan ulit ang mas malinaw na kuha o mas malapit na litrato.',
+          });
+          setIsReceiptFlowVisible(false);
+          return;
+        }
+
         setReceiptProcessingState({
           status: 'matching_items',
           receiptId: draft.id,
@@ -199,7 +210,8 @@ export function InventoryScreen() {
         receiptId: draft.id,
         message: error instanceof Error ? error.message : 'Hindi natuloy ang pagbasa ng resibo.',
       });
-      throw error;
+      setIsReceiptFlowVisible(false);
+      console.error('[receipt] flow failed', error);
     }
   }
 

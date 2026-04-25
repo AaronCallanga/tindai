@@ -101,6 +101,10 @@ function getReceiptOcrImageUrl(draft: ReceiptImageDraft) {
   return draft.compressedUri || draft.originalUri;
 }
 
+function getReceiptOcrImageCandidates(draft: ReceiptImageDraft) {
+  return Array.from(new Set([draft.compressedUri, draft.originalUri].filter(Boolean)));
+}
+
 function mapMlKitBlocks(blocks: MlKitTextBlock[]): ReceiptOcrBlock[] {
   return blocks
     .filter((block) => block.text.trim())
@@ -147,21 +151,25 @@ function loadTextRecognitionModule() {
 export async function extractReceiptText(
   draft: ReceiptImageDraft,
 ): Promise<ReceiptOcrExtraction> {
-  const imageUrl = getReceiptOcrImageUrl(draft);
+  const textRecognition = loadTextRecognitionModule();
+  const imageCandidates = getReceiptOcrImageCandidates(draft);
 
-  try {
-    const textRecognition = loadTextRecognitionModule();
-    const result = await textRecognition.recognize(imageUrl);
-
-    return {
-      provider: 'ml_kit',
-      rawText: result.text,
-      ocrBlocks: mapMlKitBlocks(result.blocks ?? []),
-      imageMeta: getReceiptImageMeta(draft),
-    };
-  } catch (error) {
-    throw new Error(buildReceiptOcrErrorMessage(error));
+  let lastError: unknown = null;
+  for (const imageUrl of imageCandidates) {
+    try {
+      const result = await textRecognition.recognize(imageUrl);
+      return {
+        provider: 'ml_kit',
+        rawText: result.text,
+        ocrBlocks: mapMlKitBlocks(result.blocks ?? []),
+        imageMeta: getReceiptImageMeta(draft),
+      };
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  throw new Error(buildReceiptOcrErrorMessage(lastError));
 }
 
 export async function extractReceiptTextWithPlaceholder(draft: ReceiptImageDraft): Promise<ReceiptOcrExtraction> {
