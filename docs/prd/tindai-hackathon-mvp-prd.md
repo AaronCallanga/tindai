@@ -453,19 +453,7 @@ Acceptance criteria:
 - Judges can clearly see that the app worked offline first.
 - Sync status is understandable without explanation.
 
-#### 6.16 SMS Restock or Utang Reminder
 
-The backend can generate a text reminder or restock alert.
-
-Recommended as demo-only:
-
-- "Tindai Alert: You only have 2 Safeguard soaps left."
-- "Mang Juan owes PHP 40 for 2 Coke Mismo."
-
-Acceptance criteria if built:
-
-- One real or simulated SMS/reminder appears during the demo.
-- Does not require complex user account setup.
 
 ### Out of Scope for Hackathon MVP
 

@@ -9,11 +9,19 @@ export type LocalStore = {
 
 export type AppMode = 'guest' | 'authenticated';
 export type MigrationStatus = 'not_started' | 'in_progress' | 'completed' | 'failed' | 'needs_review';
+export type PermissionStatus = 'pending' | 'granted' | 'denied';
+export type LocalAuthMode = 'guest' | 'account' | null;
 
 export type LocalAppState = {
   mode: AppMode;
   guestDeviceId: string;
   activeStoreId: string | null;
+  onboardingCompleted: boolean;
+  authMode: LocalAuthMode;
+  microphonePermission: PermissionStatus;
+  storagePermission: PermissionStatus;
+  tutorialShown: boolean;
+  guestConverted: boolean;
   migrationStatus: MigrationStatus;
   migrationOwnerUserId: string | null;
   pendingClaimOwnerUserId: string | null;
@@ -28,6 +36,7 @@ export type LocalInventoryItem = {
   name: string;
   aliases: string[];
   unit: string;
+  cost: number | null;
   price: number;
   currentStock: number;
   lowStockThreshold: number;

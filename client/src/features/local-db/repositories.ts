@@ -1,6 +1,7 @@
 import type * as SQLite from 'expo-sqlite';
 
 import type {
+  LocalAuthMode,
   LocalAppState,
   LocalAssistantInteraction,
   LocalCustomer,
@@ -8,12 +9,19 @@ import type {
   LocalStore,
   LocalTransactionSummary,
   MigrationStatus,
+  PermissionStatus,
 } from './types';
 
 type AppStateRow = {
   mode: 'guest' | 'authenticated';
   guest_device_id: string;
   active_store_id: string | null;
+  onboarding_completed: number;
+  auth_mode: LocalAuthMode;
+  microphone_permission: PermissionStatus;
+  storage_permission: PermissionStatus;
+  tutorial_shown: number;
+  guest_converted: number;
   migration_status: MigrationStatus;
   migration_owner_user_id: string | null;
   pending_claim_owner_user_id: string | null;
@@ -37,6 +45,7 @@ type InventoryItemRow = {
   name: string;
   aliases_json: string;
   unit: string;
+  cost: number | null;
   price: number;
   current_stock: number;
   low_stock_threshold: number;
@@ -127,6 +136,12 @@ function mapAppState(row: AppStateRow): LocalAppState {
     mode: row.mode,
     guestDeviceId: row.guest_device_id,
     activeStoreId: row.active_store_id,
+    onboardingCompleted: row.onboarding_completed === 1,
+    authMode: row.auth_mode,
+    microphonePermission: row.microphone_permission,
+    storagePermission: row.storage_permission,
+    tutorialShown: row.tutorial_shown === 1,
+    guestConverted: row.guest_converted === 1,
     migrationStatus: row.migration_status,
     migrationOwnerUserId: row.migration_owner_user_id,
     pendingClaimOwnerUserId: row.pending_claim_owner_user_id,
@@ -141,8 +156,10 @@ export class AppStateRepository {
 
   async getOrCreateState(): Promise<LocalAppState> {
     const row = await this.database.getFirstAsync<AppStateRow>(
-      `select mode, guest_device_id, active_store_id, migration_status, migration_owner_user_id,
-              pending_claim_owner_user_id, last_migration_error, last_bootstrap_at, updated_at
+      `select mode, guest_device_id, active_store_id, onboarding_completed, auth_mode,
+              microphone_permission, storage_permission, tutorial_shown, guest_converted,
+              migration_status, migration_owner_user_id, pending_claim_owner_user_id,
+              last_migration_error, last_bootstrap_at, updated_at
        from app_state
        where id = 1`,
     );
@@ -155,14 +172,27 @@ export class AppStateRepository {
     const now = new Date().toISOString();
 
     await this.database.runAsync(
-      `insert into app_state (id, mode, guest_device_id, migration_status, updated_at)
-       values (1, 'guest', ?, 'not_started', ?)`,
+      `insert into app_state (
+         id,
+         mode,
+         guest_device_id,
+         onboarding_completed,
+         microphone_permission,
+         storage_permission,
+         tutorial_shown,
+         guest_converted,
+         migration_status,
+         updated_at
+       )
+       values (1, 'guest', ?, 0, 'pending', 'pending', 0, 0, 'not_started', ?)`,
       [guestDeviceId, now],
     );
 
     const created = await this.database.getFirstAsync<AppStateRow>(
-      `select mode, guest_device_id, active_store_id, migration_status, migration_owner_user_id,
-              pending_claim_owner_user_id, last_migration_error, last_bootstrap_at, updated_at
+      `select mode, guest_device_id, active_store_id, onboarding_completed, auth_mode,
+              microphone_permission, storage_permission, tutorial_shown, guest_converted,
+              migration_status, migration_owner_user_id, pending_claim_owner_user_id,
+              last_migration_error, last_bootstrap_at, updated_at
        from app_state
        where id = 1`,
     );
@@ -177,6 +207,12 @@ export class AppStateRepository {
   async updateState(patch: {
     mode?: 'guest' | 'authenticated';
     activeStoreId?: string | null;
+    onboardingCompleted?: boolean;
+    authMode?: LocalAuthMode;
+    microphonePermission?: PermissionStatus;
+    storagePermission?: PermissionStatus;
+    tutorialShown?: boolean;
+    guestConverted?: boolean;
     migrationStatus?: MigrationStatus;
     migrationOwnerUserId?: string | null;
     pendingClaimOwnerUserId?: string | null;
@@ -195,6 +231,30 @@ export class AppStateRepository {
     if (patch.activeStoreId !== undefined) {
       updates.push('active_store_id = ?');
       params.push(patch.activeStoreId);
+    }
+    if (patch.onboardingCompleted !== undefined) {
+      updates.push('onboarding_completed = ?');
+      params.push(patch.onboardingCompleted ? 1 : 0);
+    }
+    if (patch.authMode !== undefined) {
+      updates.push('auth_mode = ?');
+      params.push(patch.authMode);
+    }
+    if (patch.microphonePermission !== undefined) {
+      updates.push('microphone_permission = ?');
+      params.push(patch.microphonePermission);
+    }
+    if (patch.storagePermission !== undefined) {
+      updates.push('storage_permission = ?');
+      params.push(patch.storagePermission);
+    }
+    if (patch.tutorialShown !== undefined) {
+      updates.push('tutorial_shown = ?');
+      params.push(patch.tutorialShown ? 1 : 0);
+    }
+    if (patch.guestConverted !== undefined) {
+      updates.push('guest_converted = ?');
+      params.push(patch.guestConverted ? 1 : 0);
     }
     if (patch.migrationStatus !== undefined) {
       updates.push('migration_status = ?');
@@ -308,17 +368,19 @@ export class InventoryRepository {
           name,
           aliases_json,
           unit,
+          cost,
           price,
           current_stock,
           low_stock_threshold,
           updated_at
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.id,
           item.storeId,
           item.name,
           JSON.stringify(item.aliases),
           item.unit,
+          item.cost,
           item.price,
           item.currentStock,
           item.lowStockThreshold,
@@ -330,7 +392,7 @@ export class InventoryRepository {
 
   async listInventoryForStore(storeId: string): Promise<LocalInventoryItem[]> {
     const rows = await this.database.getAllAsync<InventoryItemRow>(
-      `select id, store_id, name, aliases_json, unit, price, current_stock, low_stock_threshold, updated_at
+      `select id, store_id, name, aliases_json, unit, cost, price, current_stock, low_stock_threshold, updated_at
        from inventory_items
        where store_id = ?
        order by name asc`,
@@ -343,11 +405,86 @@ export class InventoryRepository {
       name: row.name,
       aliases: JSON.parse(row.aliases_json) as string[],
       unit: row.unit,
+      cost: row.cost,
       price: row.price,
       currentStock: row.current_stock,
       lowStockThreshold: row.low_stock_threshold,
       updatedAt: row.updated_at,
     }));
+  }
+
+  async createInventoryItemForStore(entry: {
+    storeId: string;
+    name: string;
+    aliases?: string[];
+    unit?: string;
+    cost?: number | null;
+    price: number;
+    currentStock: number;
+    lowStockThreshold?: number;
+  }): Promise<LocalInventoryItem> {
+    const now = new Date().toISOString();
+    const normalizedName = entry.name.trim();
+
+    if (!normalizedName) {
+      throw new Error('Item name is required.');
+    }
+
+    const existing = await this.database.getFirstAsync<InventoryItemRow>(
+      `select id, store_id, name, aliases_json, unit, cost, price, current_stock, low_stock_threshold, updated_at
+       from inventory_items
+       where store_id = ?
+         and lower(name) = lower(?)
+       limit 1`,
+      [entry.storeId, normalizedName],
+    );
+
+    if (existing) {
+      throw new Error('May item na may ganyang pangalan.');
+    }
+
+    const id = createLocalId('item');
+    const aliases = Array.from(
+      new Set(
+        [normalizedName, ...(entry.aliases ?? [])]
+          .map((alias) => alias.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    const unit = entry.unit?.trim() || 'pcs';
+    const price = Math.max(0, entry.price);
+    const cost = entry.cost === null || entry.cost === undefined ? null : Math.max(0, entry.cost);
+    const currentStock = Math.max(0, entry.currentStock);
+    const lowStockThreshold = Math.max(0, entry.lowStockThreshold ?? 0);
+
+    await this.database.runAsync(
+      `insert into inventory_items (
+        id,
+        store_id,
+        name,
+        aliases_json,
+        unit,
+        cost,
+        price,
+        current_stock,
+        low_stock_threshold,
+        updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, entry.storeId, normalizedName, JSON.stringify(aliases), unit, cost, price, currentStock, lowStockThreshold, now],
+    );
+
+    return {
+      id,
+      storeId: entry.storeId,
+      name: normalizedName,
+      aliases,
+      unit,
+      cost,
+      price,
+      currentStock,
+      lowStockThreshold,
+      updatedAt: now,
+    };
   }
 }
 

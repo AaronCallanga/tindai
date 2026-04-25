@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as SQLite from 'expo-sqlite';
 
-import { CustomerRepository, TransactionRepository } from './repositories';
+import { CustomerRepository, InventoryRepository, TransactionRepository } from './repositories';
 
 describe('TransactionRepository', () => {
   it('lists recent store transactions newest-first for dashboard history', async () => {
@@ -104,5 +104,33 @@ describe('CustomerRepository', () => {
       name: 'Mang Juan',
       utangBalance: 150,
     });
+  });
+});
+
+describe('InventoryRepository', () => {
+  it('creates a local inventory item with normalized aliases', async () => {
+    const database = {
+      getFirstAsync: vi.fn().mockResolvedValue(null),
+      runAsync: vi.fn().mockResolvedValue(undefined),
+    } as unknown as SQLite.SQLiteDatabase;
+
+    const repository = new InventoryRepository(database);
+    const item = await repository.createInventoryItemForStore({
+      storeId: 'store-1',
+      name: 'Coke Mismo',
+      aliases: ['Coke', 'coke mismo'],
+      unit: 'pcs',
+      cost: 12,
+      price: 20,
+      currentStock: 0,
+      lowStockThreshold: 5,
+    });
+
+    expect(database.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('insert into inventory_items'),
+      expect.arrayContaining([item.id, 'store-1', 'Coke Mismo']),
+    );
+    expect(item.aliases).toEqual(['coke mismo', 'coke']);
+    expect(item.cost).toBe(12);
   });
 });

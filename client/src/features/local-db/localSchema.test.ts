@@ -23,6 +23,9 @@ describe('local SQLite schema', () => {
 
     expect(schema).toContain('mode text not null default \'guest\'');
     expect(schema).toContain('guest_device_id text not null');
+    expect(schema).toContain('onboarding_completed integer not null default 0');
+    expect(schema).toContain('microphone_permission text not null default \'pending\'');
+    expect(schema).toContain('tutorial_shown integer not null default 0');
     expect(schema).toContain('owner_user_id text not null');
     expect(schema).toContain('client_mutation_id text not null');
     expect(schema).toContain('sync_status text not null');

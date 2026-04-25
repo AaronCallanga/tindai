@@ -3,45 +3,27 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '@/navigation/colors';
 
 type OnboardingOverlayProps = {
-  step: 1 | 2 | 3;
-  onNext: () => void;
-  onSkip: () => void;
+  onDismiss: () => void;
 };
 
-const STEP_COPY = {
-  1: {
-    title: 'Track inventory in one place',
-    body: 'Use dashboard and inventory tabs immediately. You can keep working even without signing in first.',
-    next: 'Next',
-  },
-  2: {
-    title: 'Update stock with voice or text',
-    body: 'Commands apply locally right away and stay available offline.',
-    next: 'Next',
-  },
-  3: {
-    title: 'Connect account when ready',
-    body: 'Create an account from Profile to sync this device data to cloud.',
-    next: 'Finish',
-  },
-} as const;
-
-export function OnboardingOverlay({ step, onNext, onSkip }: OnboardingOverlayProps) {
-  const content = STEP_COPY[step];
-
+export function OnboardingOverlay({ onDismiss }: OnboardingOverlayProps) {
   return (
     <View pointerEvents="box-none" style={styles.layer}>
       <View style={styles.backdrop} />
       <View style={styles.card}>
-        <Text style={styles.eyebrow}>Quick Tour {step}/3</Text>
-        <Text style={styles.title}>{content.title}</Text>
-        <Text style={styles.body}>{content.body}</Text>
+        <Text style={styles.eyebrow}>Unang gamit</Text>
+        <Text style={styles.title}>I-tap dito para magsalita ng utos</Text>
+        <Text style={styles.body}>Halimbawa: "Nakabenta ako ng dalawang Coke."</Text>
+        <View style={styles.arrowWrap}>
+          <Text style={styles.arrow}>↓</Text>
+          <Text style={styles.arrowLabel}>Mic button</Text>
+        </View>
         <View style={styles.actions}>
-          <Pressable style={styles.secondaryButton} onPress={onSkip}>
+          <Pressable style={styles.secondaryButton} onPress={onDismiss}>
             <Text style={styles.secondaryLabel}>Skip</Text>
           </Pressable>
-          <Pressable style={styles.primaryButton} onPress={onNext}>
-            <Text style={styles.primaryLabel}>{content.next}</Text>
+          <Pressable style={styles.primaryButton} onPress={onDismiss}>
+            <Text style={styles.primaryLabel}>Sige</Text>
           </Pressable>
         </View>
       </View>
@@ -58,7 +40,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    backgroundColor: 'rgba(0, 0, 0, 0.42)',
   },
   card: {
     width: '100%',
@@ -87,6 +69,22 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 21,
+  },
+  arrowWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  arrow: {
+    color: colors.primaryDeep,
+    fontSize: 30,
+    fontWeight: '800',
+    lineHeight: 34,
+  },
+  arrowLabel: {
+    color: colors.primaryDeep,
+    fontSize: 13,
+    fontWeight: '700',
   },
   actions: {
     marginTop: 6,

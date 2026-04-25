@@ -337,7 +337,7 @@ export function ProfileScreen() {
               <Pressable style={styles.ghostButton} onPress={showLogin}>
                 <Text style={styles.ghostButtonLabel}>Log in</Text>
               </Pressable>
-              <Pressable style={styles.primaryButton} onPress={showSignUp}>
+              <Pressable style={styles.primaryButton} onPress={() => void showSignUp()}>
                 <Text style={styles.primaryButtonLabel}>Create account</Text>
               </Pressable>
             </View>

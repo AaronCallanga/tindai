@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   Modal,
   ScrollView,
   StyleSheet,
@@ -12,9 +13,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { detectLanguageStyle } from '@/features/assistant/assistantLanguageDetection';
 import type { CommandSource } from '@/features/commands/localCommandService';
+import { useAuth } from '@/context/AuthContext';
 import { useLocalData } from '@/features/local-data/LocalDataContext';
 import type { ParserResult } from '@/features/parser/offlineParser';
+import { getLanguageCode, speakText, stopSpeaking } from '@/services/ttsService';
 
 type SpeechRecognitionStartOptions = {
   lang?: string;
@@ -53,6 +57,7 @@ const useSpeechRecognitionEvent =
   ((_eventName: string, _listener: (event: any) => void) => undefined);
 
 export function DashboardScreen() {
+  const { authMode, microphonePermission, requestMicrophonePermission, openDeviceSettings, showLogin } = useAuth();
   const {
     appState,
     store,
@@ -69,6 +74,7 @@ export function DashboardScreen() {
     applyManualAdjustment,
     submitFallbackCommand,
     createLocalCustomer,
+    createLocalInventoryItem,
     submitAssistantQuestion,
   } = useLocalData();
   const [commandText, setCommandText] = useState('');
@@ -86,9 +92,24 @@ export function DashboardScreen() {
   const [fallbackCustomerName, setFallbackCustomerName] = useState('');
   const [isSavingFallback, setIsSavingFallback] = useState(false);
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
-  const [assistantAnswer, setAssistantAnswer] = useState<string | null>(null);
+  const [assistantAnswer, setAssistantAnswer] = useState<{
+    questionText: string;
+    answerText: string;
+    spokenText: string | null;
+  } | null>(null);
   const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false);
+  const [guestBannerDismissed, setGuestBannerDismissed] = useState(false);
+  const [micBannerDismissed, setMicBannerDismissed] = useState(false);
+  const [isAddItemVisible, setIsAddItemVisible] = useState(false);
+  const [itemName, setItemName] = useState('');
+  const [itemQuantity, setItemQuantity] = useState('0');
+  const [itemCost, setItemCost] = useState('');
+  const [itemPrice, setItemPrice] = useState('');
+  const [itemFormError, setItemFormError] = useState<string | null>(null);
+  const [isSavingItem, setIsSavingItem] = useState(false);
   const hasSpeechRecognitionNative = speechRecognitionRuntime !== null;
+  const isGuestMode = authMode === 'guest' || appState?.mode === 'guest';
+  const isMicDisabled = microphonePermission === 'denied';
 
   const lowStockItems = useMemo(
     () => inventoryItems.filter((item) => item.currentStock <= item.lowStockThreshold),
@@ -161,8 +182,13 @@ export function DashboardScreen() {
           setPendingParserResult(null);
           setPendingCustomerName('');
           setIsSubmittingQuestion(true);
+          await stopSpeaking();
           const answer = await submitAssistantQuestion(rawText, source === 'voice' ? 'voice' : 'text');
-          setAssistantAnswer(answer.answerText);
+          setAssistantAnswer({
+            questionText: rawText,
+            answerText: answer.answerText,
+            spokenText: answer.spokenText,
+          });
           setCommandMessage('Nasagot na ang tanong mo.');
           return;
         }
@@ -187,6 +213,27 @@ export function DashboardScreen() {
     },
     [openFallback, submitAssistantQuestion, submitLocalCommand],
   );
+
+  const handleSpeakAssistantAnswer = useCallback(async () => {
+    if (!assistantAnswer?.spokenText) {
+      setCommandMessage('Wala pang babasahing sagot.');
+      return;
+    }
+
+    const languageStyle = detectLanguageStyle(assistantAnswer.questionText);
+    const result = await speakText(assistantAnswer.spokenText, {
+      language: getLanguageCode(languageStyle),
+    });
+
+    if (!result.spoken) {
+      setCommandMessage('Hindi mabasa nang malakas sa phone na ito.');
+      return;
+    }
+
+    if (result.fallbackUsed) {
+      setCommandMessage('Binasa muna sa English para tuloy ang sagot.');
+    }
+  }, [assistantAnswer]);
 
   const pendingNeedsCustomer =
     pendingParserResult?.intent === 'utang' &&
@@ -237,10 +284,68 @@ export function DashboardScreen() {
     [applyManualAdjustment],
   );
 
+  const handleAddItem = useCallback(async () => {
+    const trimmedName = itemName.trim();
+    const quantity = Number(itemQuantity);
+    const cost = Number(itemCost);
+    const price = Number(itemPrice);
+
+    if (!trimmedName) {
+      setItemFormError('Ilagay ang pangalan ng item.');
+      return;
+    }
+
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      setItemFormError('Ang quantity ay dapat zero o mas mataas.');
+      return;
+    }
+
+    if (Number.isNaN(cost) || cost < 0) {
+      setItemFormError('Ang cost price ay dapat zero o mas mataas.');
+      return;
+    }
+
+    if (Number.isNaN(price) || price < 0) {
+      setItemFormError('Ang selling price ay dapat zero o mas mataas.');
+      return;
+    }
+
+    setIsSavingItem(true);
+    setItemFormError(null);
+    try {
+      await createLocalInventoryItem({
+        name: trimmedName,
+        quantity,
+        cost,
+        price,
+      });
+      setItemName('');
+      setItemQuantity('0');
+      setItemCost('');
+      setItemPrice('');
+      setIsAddItemVisible(false);
+      setCommandMessage('Naidagdag na ang item.');
+    } catch (caughtError) {
+      setItemFormError(caughtError instanceof Error ? caughtError.message : 'Hindi naidagdag ang item.');
+    } finally {
+      setIsSavingItem(false);
+    }
+  }, [createLocalInventoryItem, itemCost, itemName, itemPrice, itemQuantity]);
+
   const startListening = useCallback(async () => {
     if (!hasSpeechRecognitionNative) {
       setCommandMessage('Voice input needs a development build. You can type your command instead.');
       return;
+    }
+
+    if (microphonePermission === 'denied') {
+      const nextStatus = await requestMicrophonePermission();
+      if (nextStatus === 'denied') {
+        setCommandMessage('Kailangan ng microphone access para sa voice input. I-tap ang mic button para i-enable sa Settings.');
+        await openDeviceSettings();
+        return;
+      }
+      setMicBannerDismissed(true);
     }
 
     if (isListening) {
@@ -254,9 +359,15 @@ export function DashboardScreen() {
         return;
       }
 
-      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!permission.granted) {
-        setCommandMessage('Payagan ang mic para makapagsalita ka ng utos.');
+      if (microphonePermission === 'pending') {
+        const permission = await requestMicrophonePermission();
+        if (permission !== 'granted') {
+          setCommandMessage('Payagan ang mic para makapagsalita ka ng utos.');
+          return;
+        }
+      }
+
+      if (isMicDisabled) {
         return;
       }
 
@@ -270,7 +381,14 @@ export function DashboardScreen() {
       setCommandMessage(caughtError instanceof Error ? caughtError.message : 'Hindi nagsimula ang voice input.');
       setIsListening(false);
     }
-  }, [hasSpeechRecognitionNative, isListening]);
+  }, [
+    hasSpeechRecognitionNative,
+    isListening,
+    isMicDisabled,
+    microphonePermission,
+    openDeviceSettings,
+    requestMicrophonePermission,
+  ]);
 
   useSpeechRecognitionEvent('start', () => {
     setIsListening(true);
@@ -355,6 +473,8 @@ export function DashboardScreen() {
   }, [createLocalCustomer, fallbackCustomerName]);
 
   const showPendingStrip = appState?.mode === 'authenticated' && pendingTransactions.length > 0;
+  const showGuestBanner = isGuestMode && !guestBannerDismissed;
+  const showMicBanner = isMicDisabled && !micBannerDismissed;
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -380,6 +500,35 @@ export function DashboardScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {showGuestBanner ? (
+          <View style={styles.bannerCard}>
+            <View style={styles.bannerBody}>
+              <Text style={styles.bannerTitle}>Ang data ay local lang.</Text>
+              <Text style={styles.bannerText}>Mag-sign in para mag-sync sa cloud.</Text>
+            </View>
+            <View style={styles.bannerActions}>
+              <Pressable onPress={() => void showLogin()} style={styles.bannerPrimaryAction}>
+                <Text style={styles.bannerPrimaryLabel}>Sign In</Text>
+              </Pressable>
+              <Pressable onPress={() => setGuestBannerDismissed(true)} style={styles.bannerDismissAction}>
+                <Text style={styles.bannerDismissLabel}>Isara</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {showMicBanner ? (
+          <View style={styles.warningBanner}>
+            <View style={styles.bannerBody}>
+              <Text style={styles.bannerTitle}>Kailangan ng microphone access para sa voice input.</Text>
+              <Text style={styles.bannerText}>I-tap ang mic button para i-enable sa Settings.</Text>
+            </View>
+            <Pressable onPress={() => setMicBannerDismissed(true)} style={styles.bannerDismissAction}>
+              <Text style={styles.bannerDismissLabel}>Isara</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {showPendingStrip ? (
           <View style={styles.pendingStrip}>
             <ActivityIndicator color="#00604c" size="small" />
@@ -390,11 +539,19 @@ export function DashboardScreen() {
         ) : null}
 
         <View style={styles.voiceSection}>
-          <TouchableOpacity activeOpacity={0.85} onPress={() => void startListening()} style={styles.voiceButton}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => void startListening()}
+            style={[styles.voiceButton, isMicDisabled && styles.voiceButtonDisabled]}
+          >
             <Ionicons color="#ffffff" name={isListening ? 'stop-outline' : 'mic-outline'} size={56} />
           </TouchableOpacity>
           <Text style={styles.voiceLabel}>{isListening ? 'NAKIKINIG...' : 'BOSIS'}</Text>
           <Text style={styles.voiceTitle}>Tap para magsalita ng utos</Text>
+          <Pressable onPress={() => setIsAddItemVisible(true)} style={styles.addItemButton}>
+            <Ionicons color="#00604c" name="add-circle-outline" size={18} />
+            <Text style={styles.addItemButtonLabel}>Magdagdag ng item</Text>
+          </Pressable>
         </View>
 
         <View style={styles.commandCard}>
@@ -434,7 +591,25 @@ export function DashboardScreen() {
         {assistantAnswer ? (
           <View style={styles.assistantCard}>
             <Text style={styles.assistantTitle}>Sagot ni Tinday</Text>
-            <Text style={styles.assistantText}>{assistantAnswer}</Text>
+            <Text style={styles.assistantText}>{assistantAnswer.answerText}</Text>
+            <View style={styles.assistantActions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => void handleSpeakAssistantAnswer()}
+                style={styles.assistantActionButton}
+              >
+                <Ionicons color="#00604c" name="volume-high-outline" size={18} />
+                <Text style={styles.assistantActionText}>Basahin</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => void stopSpeaking()}
+                style={styles.assistantActionButton}
+              >
+                <Ionicons color="#00604c" name="stop-circle-outline" size={18} />
+                <Text style={styles.assistantActionText}>Ihinto</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : null}
 
@@ -503,6 +678,9 @@ export function DashboardScreen() {
             <Text style={styles.emptyText}>
               Maglagay muna ng paninda para makapagtala ka ng benta at utang.
             </Text>
+            <Pressable onPress={() => setIsAddItemVisible(true)} style={styles.emptyActionButton}>
+              <Text style={styles.emptyActionLabel}>Magdagdag ng item</Text>
+            </Pressable>
           </View>
         ) : (
           <View style={styles.activityCard}>
@@ -563,6 +741,65 @@ export function DashboardScreen() {
         ) : null}
 
       </ScrollView>
+
+      <Modal animationType="slide" transparent visible={isAddItemVisible} onRequestClose={() => setIsAddItemVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Magdagdag ng item</Text>
+
+            <Text style={styles.modalLabel}>Pangalan ng item</Text>
+            <TextInput
+              autoCapitalize="words"
+              placeholder="Hal. Coke Mismo"
+              placeholderTextColor="#7a847e"
+              style={styles.customerInput}
+              value={itemName}
+              onChangeText={setItemName}
+            />
+
+            <Text style={styles.modalLabel}>Quantity</Text>
+            <TextInput
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor="#7a847e"
+              style={styles.customerInput}
+              value={itemQuantity}
+              onChangeText={setItemQuantity}
+            />
+
+            <Text style={styles.modalLabel}>Cost price</Text>
+            <TextInput
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor="#7a847e"
+              style={styles.customerInput}
+              value={itemCost}
+              onChangeText={setItemCost}
+            />
+
+            <Text style={styles.modalLabel}>Selling price</Text>
+            <TextInput
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor="#7a847e"
+              style={styles.customerInput}
+              value={itemPrice}
+              onChangeText={setItemPrice}
+            />
+
+            {itemFormError ? <Text style={styles.formErrorText}>{itemFormError}</Text> : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setIsAddItemVisible(false)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Kanselahin</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => void handleAddItem()} style={styles.confirmButton} disabled={isSavingItem}>
+                <Text style={styles.confirmButtonText}>{isSavingItem ? 'Nagse-save...' : 'I-save ang item'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal animationType="slide" transparent visible={isFallbackVisible} onRequestClose={() => setIsFallbackVisible(false)}>
         <View style={styles.modalBackdrop}>
@@ -711,6 +948,68 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: 14,
   },
+  bannerCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d8eee4',
+    backgroundColor: '#f1fbf6',
+    padding: 12,
+    gap: 10,
+  },
+  warningBanner: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#f0d6aa',
+    backgroundColor: '#fff7ea',
+    padding: 12,
+    gap: 10,
+  },
+  bannerBody: {
+    gap: 2,
+  },
+  bannerTitle: {
+    color: '#1f2925',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  bannerText: {
+    color: '#4d5a53',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  bannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bannerPrimaryAction: {
+    minHeight: 36,
+    borderRadius: 10,
+    backgroundColor: '#00604c',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  bannerPrimaryLabel: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bannerDismissAction: {
+    minHeight: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#d8dbd9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  bannerDismissLabel: {
+    color: '#3e4945',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   pendingStrip: {
     backgroundColor: '#e9f6f1',
     borderRadius: 12,
@@ -746,6 +1045,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#00604c',
   },
+  voiceButtonDisabled: {
+    backgroundColor: '#8ba79e',
+  },
   voiceLabel: {
     color: '#00604c',
     fontSize: 12,
@@ -758,6 +1060,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 30,
     paddingHorizontal: 20,
+  },
+  addItemButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d8dbd9',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addItemButtonLabel: {
+    color: '#00604c',
+    fontSize: 13,
+    fontWeight: '700',
   },
   commandCard: {
     backgroundColor: '#ffffff',
@@ -822,6 +1140,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 19,
     fontWeight: '600',
+  },
+  assistantActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  assistantActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cfe7dd',
+    backgroundColor: '#ffffff',
+  },
+  assistantActionText: {
+    color: '#00604c',
+    fontSize: 12,
+    fontWeight: '800',
   },
   confirmCard: {
     backgroundColor: '#ffffff',
@@ -932,6 +1271,20 @@ const styles = StyleSheet.create({
     color: '#4d5a53',
     fontSize: 14,
     lineHeight: 20,
+  },
+  emptyActionButton: {
+    marginTop: 4,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: '#00604c',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  emptyActionLabel: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   card: {
     backgroundColor: '#ffffff',
@@ -1095,5 +1448,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: 6,
+  },
+  formErrorText: {
+    color: '#9b1c12',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
   },
 });

@@ -3,46 +3,41 @@ import { describe, expect, it } from 'vitest';
 import { appFlowReducer, getActiveRoute, initialAppFlowState } from '@/context/appFlow';
 
 describe('appFlowReducer', () => {
-  it('starts on tabs while onboarding remains incomplete', () => {
+  it('starts on auth choice before onboarding is complete', () => {
     expect(getActiveRoute(initialAppFlowState)).toEqual({
-      kind: 'tabs',
+      kind: 'authChoice',
     });
-    expect(initialAppFlowState.hasCompletedOnboarding).toBe(false);
   });
 
-  it('advances through onboarding and marks it complete on final step', () => {
-    const step2 = appFlowReducer(initialAppFlowState, { type: 'advanceOnboarding' });
-    const step3 = appFlowReducer(step2, { type: 'advanceOnboarding' });
-    const done = appFlowReducer(step3, { type: 'advanceOnboarding' });
+  it('moves guest users to permissions and then tabs', () => {
+    const guest = appFlowReducer(initialAppFlowState, { type: 'chooseGuestMode' });
+    const done = appFlowReducer(guest, { type: 'completeOnboarding' });
 
-    expect(step2.onboardingStep).toBe(2);
-    expect(step3.onboardingStep).toBe(3);
-    expect(done.hasCompletedOnboarding).toBe(true);
+    expect(getActiveRoute(guest)).toEqual({ kind: 'permissions' });
+    expect(done.onboardingCompleted).toBe(true);
     expect(getActiveRoute(done)).toEqual({ kind: 'tabs' });
   });
 
-  it('skips onboarding while remaining on tabs', () => {
-    const skipped = appFlowReducer(initialAppFlowState, { type: 'skipOnboarding' });
-
-    expect(skipped.hasCompletedOnboarding).toBe(true);
-    expect(getActiveRoute(skipped)).toEqual({ kind: 'tabs' });
-  });
-
-  it('keeps signed-out users in tabs by default', () => {
-    const signedIn = appFlowReducer(initialAppFlowState, { type: 'signIn' });
-    const signedOut = appFlowReducer(signedIn, { type: 'signOut' });
-
-    expect(getActiveRoute(signedIn)).toEqual({ kind: 'tabs' });
-    expect(getActiveRoute(signedOut)).toEqual({ kind: 'tabs' });
-  });
-
-  it('shows and hides auth screens on demand', () => {
+  it('shows account auth screens on demand', () => {
     const signUp = appFlowReducer(initialAppFlowState, { type: 'showSignUp' });
     const login = appFlowReducer(signUp, { type: 'showLogin' });
-    const closed = appFlowReducer(login, { type: 'closeAuth' });
 
     expect(getActiveRoute(signUp)).toEqual({ kind: 'auth', screen: 'signUp' });
     expect(getActiveRoute(login)).toEqual({ kind: 'auth', screen: 'login' });
-    expect(getActiveRoute(closed)).toEqual({ kind: 'tabs' });
+  });
+
+  it('returns to auth choice when auth is closed before sign-in', () => {
+    const signUp = appFlowReducer(initialAppFlowState, { type: 'showSignUp' });
+    const closed = appFlowReducer(signUp, { type: 'closeAuth' });
+
+    expect(getActiveRoute(closed)).toEqual({ kind: 'authChoice' });
+  });
+
+  it('keeps signed-in account users on permissions until onboarding completes', () => {
+    const account = appFlowReducer(initialAppFlowState, { type: 'showLogin' });
+    const signedIn = appFlowReducer(account, { type: 'signIn' });
+
+    expect(signedIn.authMode).toBe('account');
+    expect(getActiveRoute(signedIn)).toEqual({ kind: 'permissions' });
   });
 });

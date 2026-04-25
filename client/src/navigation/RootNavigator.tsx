@@ -5,10 +5,12 @@ import { colors } from '@/navigation/colors';
 import { HomeTabs } from '@/screens/HomeTabs';
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 import { SignUpScreen } from '@/screens/auth/SignUpScreen';
+import { AuthChoiceScreen } from '@/screens/onboarding/AuthChoiceScreen';
 import { OnboardingOverlay } from '@/screens/onboarding/OnboardingOverlay';
+import { PermissionsScreen } from '@/screens/onboarding/PermissionsScreen';
 
 export function RootNavigator() {
-  const { activeRoute, hasCompletedOnboarding, onboardingStep, isAuthLoading, nextOnboardingStep, skipOnboarding } = useAuth();
+  const { activeRoute, isAuthLoading, onboardingCompleted, tutorialShown, markTutorialShown } = useAuth();
 
   if (isAuthLoading) {
     return (
@@ -18,15 +20,23 @@ export function RootNavigator() {
     );
   }
 
+  if (activeRoute.kind === 'authChoice') {
+    return <AuthChoiceScreen />;
+  }
+
   if (activeRoute.kind === 'auth') {
     return activeRoute.screen === 'login' ? <LoginScreen /> : <SignUpScreen />;
+  }
+
+  if (activeRoute.kind === 'permissions') {
+    return <PermissionsScreen />;
   }
 
   return (
     <View style={styles.tabsRoot}>
       <HomeTabs />
-      {!hasCompletedOnboarding ? (
-        <OnboardingOverlay step={onboardingStep} onNext={nextOnboardingStep} onSkip={skipOnboarding} />
+      {onboardingCompleted && !tutorialShown ? (
+        <OnboardingOverlay onDismiss={() => void markTutorialShown()} />
       ) : null}
     </View>
   );
