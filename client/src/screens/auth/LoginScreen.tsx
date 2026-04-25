@@ -1,45 +1,142 @@
+import { FontAwesome } from '@expo/vector-icons';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { AuthField } from '@/components/AuthField';
 import { AuthLayout } from '@/components/AuthLayout';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { useAuth } from '@/context/AuthContext';
 import { colors } from '@/navigation/colors';
 
 const authErrorColor = '#BA1A1A';
 
 export function LoginScreen() {
-  const { showSignUp, signInWithGoogle, authError } = useAuth();
+  const {
+    showSignUp,
+    signInWithGoogle,
+    signInWithEmail,
+    authError,
+    clearAuthError,
+    googleSignInHint,
+  } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+
+  const fieldErrors = useMemo(
+    () => ({
+      email: attemptedSubmit && !email.trim(),
+      password: attemptedSubmit && !password,
+    }),
+    [attemptedSubmit, email, password],
+  );
+
+  const handleEmailSignIn = async () => {
+    setAttemptedSubmit(true);
+    if (!email.trim() || !password) {
+      return;
+    }
+
+    await signInWithEmail({
+      email,
+      password,
+    });
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleSubmitting(true);
+    try {
+      await signInWithGoogle();
+    } finally {
+      setIsGoogleSubmitting(false);
+    }
+  };
 
   return (
     <AuthLayout
       badge="Client Access"
       title="Welcome back"
-      subtitle="Use Google to open the client workspace, check the dashboard, and stay on top of inventory and analytics."
-      submitLabel="Continue with Google"
+      subtitle="Sign in with email and password or continue with Google."
+      submitLabel="Sign in"
       alternateLabel="Need an account? Create one"
-      onSubmit={signInWithGoogle}
+      onSubmit={handleEmailSignIn}
       onAlternatePress={showSignUp}
     >
-      <View style={styles.infoBlock}>
-        <Text style={styles.infoText}>Google OAuth is required for this MVP auth flow.</Text>
-        {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
+      <View style={styles.formBlock}>
+        <AuthField
+          label="Email"
+          placeholder="you@example.com"
+          value={email}
+          onChangeText={(value) => {
+            setEmail(value);
+            clearAuthError();
+          }}
+          keyboardType="email-address"
+          autoComplete="email"
+          textContentType="emailAddress"
+          hasError={fieldErrors.email}
+        />
+        <AuthField
+          label="Password"
+          placeholder="Enter your password"
+          value={password}
+          onChangeText={(value) => {
+            setPassword(value);
+            clearAuthError();
+          }}
+          secureTextEntry
+          autoComplete="password"
+          textContentType="password"
+          hasError={fieldErrors.password}
+        />
       </View>
+
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>or</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <PrimaryButton
+        label={isGoogleSubmitting ? 'Signing in with Google...' : 'Continue with Google'}
+        onPress={handleGoogleSignIn}
+        variant="ghost"
+        leadingIcon={<FontAwesome name="google" size={16} color={colors.primaryDeep} />}
+      />
+
+      {googleSignInHint ? <Text style={styles.infoText}>{googleSignInHint}</Text> : null}
+
+      {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
     </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  infoBlock: {
+  formBlock: {
+    gap: 12,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.68)',
-    padding: 14,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   infoText: {
     color: colors.muted,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 20,
   },
   errorText: {
     color: authErrorColor,
@@ -48,4 +145,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-

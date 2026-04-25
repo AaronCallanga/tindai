@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
+import { type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import { colors } from '@/navigation/colors';
 
@@ -6,10 +7,12 @@ export function PrimaryButton({
   label,
   onPress,
   variant = 'solid',
+  leadingIcon,
 }: {
   label: string;
   onPress: () => void;
   variant?: 'solid' | 'ghost';
+  leadingIcon?: ReactNode;
 }) {
   const ghost = variant === 'ghost';
 
@@ -22,7 +25,10 @@ export function PrimaryButton({
         pressed && styles.pressed,
       ]}
     >
-      <Text style={[styles.label, ghost && styles.ghostLabel]}>{label}</Text>
+      <View style={styles.content}>
+        {leadingIcon}
+        <Text style={[styles.label, ghost && styles.ghostLabel]}>{label}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -48,6 +54,12 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.94,
     transform: [{ scale: 0.985 }],
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   label: {
     color: colors.surface,
