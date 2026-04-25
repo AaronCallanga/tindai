@@ -10,10 +10,10 @@ type AuthLayoutProps = {
   badge: string;
   title: string;
   subtitle: string;
-  submitLabel: string;
-  alternateLabel: string;
-  onSubmit: () => Promise<void> | void;
-  onAlternatePress: () => void;
+  submitLabel?: string;
+  alternateLabel?: string;
+  onSubmit?: () => Promise<void> | void;
+  onAlternatePress?: () => void;
   children: ReactNode;
 };
 
@@ -30,6 +30,10 @@ export function AuthLayout({
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    if (!onSubmit) {
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -58,10 +62,14 @@ export function AuthLayout({
           <View style={styles.form}>{children}</View>
 
           <View style={styles.actions}>
-            <PrimaryButton label={loading ? 'Please wait...' : submitLabel} onPress={handleSubmit} />
-            <Pressable onPress={onAlternatePress} style={styles.linkButton}>
-              <Text style={styles.linkText}>{alternateLabel}</Text>
-            </Pressable>
+            {submitLabel && onSubmit ? (
+              <PrimaryButton label={loading ? 'Please wait...' : submitLabel} onPress={handleSubmit} />
+            ) : null}
+            {alternateLabel && onAlternatePress ? (
+              <Pressable onPress={onAlternatePress} style={styles.linkButton}>
+                <Text style={styles.linkText}>{alternateLabel}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </SafeAreaView>
