@@ -244,7 +244,7 @@ export function DashboardScreen() {
           </Text>
         </View>
         <View style={styles.statusPill}>
-          <Text style={styles.statusText}>{appState?.mode === 'authenticated' ? 'Cloud Linked' : 'Guest Mode'}</Text>
+          <Text style={styles.statusText}>{appState?.mode === 'authenticated' ? 'May account' : 'Walang account'}</Text>
         </View>
       </View>
 
@@ -253,8 +253,8 @@ export function DashboardScreen() {
           <TouchableOpacity activeOpacity={0.85} onPress={() => void startListening()} style={styles.voiceButton}>
             <Ionicons color="#ffffff" name={isListening ? 'stop-outline' : 'mic-outline'} size={56} />
           </TouchableOpacity>
-          <Text style={styles.voiceLabel}>{isListening ? 'LISTENING...' : 'VOICE COMMAND'}</Text>
-          <Text style={styles.voiceTitle}>Tap to Speak Sales Command</Text>
+          <Text style={styles.voiceLabel}>{isListening ? 'NAKIKINIG...' : 'BOSIS'}</Text>
+          <Text style={styles.voiceTitle}>Tap para magsalita ng utos</Text>
         </View>
 
         <View style={styles.commandCard}>
@@ -289,7 +289,7 @@ export function DashboardScreen() {
                 autoCapitalize="words"
                 editable={!pendingAction}
                 onChangeText={setPendingCustomerName}
-                placeholder="Customer name"
+                placeholder="Pangalan ng may utang"
                 placeholderTextColor="#7a847e"
                 style={styles.customerInput}
                 value={pendingCustomerName}
@@ -302,7 +302,7 @@ export function DashboardScreen() {
                 onPress={() => void handleConfirmPending()}
                 style={[styles.confirmButton, (pendingAction || pendingNeedsCustomer) && styles.commandButtonDisabled]}
               >
-                <Text style={styles.confirmButtonText}>{pendingAction ? 'Applying...' : 'Confirm'}</Text>
+                <Text style={styles.confirmButtonText}>{pendingAction ? 'Tinatala...' : 'Itala'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 activeOpacity={0.85}
@@ -312,7 +312,7 @@ export function DashboardScreen() {
                 }}
                 style={styles.secondaryButton}
               >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
+                <Text style={styles.secondaryButtonText}>Kanselahin</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -330,24 +330,24 @@ export function DashboardScreen() {
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{inventoryItems.length}</Text>
-            <Text style={styles.summaryLabel}>Items</Text>
+            <Text style={styles.summaryLabel}>Produkto</Text>
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{lowStockItems.length}</Text>
-            <Text style={styles.summaryLabel}>Low Stock</Text>
+            <Text style={styles.summaryLabel}>Malapit maubos</Text>
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>P{inventoryValue.toFixed(0)}</Text>
-            <Text style={styles.summaryLabel}>Stock Value</Text>
+            <Text style={styles.summaryLabel}>Halaga ng paninda</Text>
           </View>
         </View>
 
         {inventoryItems.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons color="#00604c" name="cube-outline" size={28} />
-            <Text style={styles.emptyTitle}>No inventory synced yet</Text>
+            <Text style={styles.emptyTitle}>Wala pang paninda</Text>
             <Text style={styles.emptyText}>
-              Add or seed inventory in Supabase for this account, then refresh to cache it for offline use.
+              Maglagay muna ng paninda para makapagtala ka ng benta at utang.
             </Text>
           </View>
         ) : (
@@ -360,7 +360,7 @@ export function DashboardScreen() {
                 <View style={styles.activityBody}>
                   <Text style={styles.activityLabel}>{item.name}</Text>
                   <Text style={styles.activityTime}>
-                    {item.currentStock} {item.unit} {item.currentStock <= item.lowStockThreshold ? '• Low stock' : ''}
+                    {item.currentStock} {item.unit} {item.currentStock <= item.lowStockThreshold ? '- Malapit maubos' : ''}
                   </Text>
                 </View>
                 <View style={styles.adjustWrap}>
@@ -389,9 +389,9 @@ export function DashboardScreen() {
         )}
 
         <View style={styles.card}>
-          <Text style={styles.recentTitle}>Recent Transactions</Text>
+          <Text style={styles.recentTitle}>Huling mga tala</Text>
           {recentTransactions.length === 0 ? (
-            <Text style={styles.activityTime}>No local transactions yet.</Text>
+            <Text style={styles.activityTime}>Wala pang naitala.</Text>
           ) : (
             recentTransactions.slice(0, 6).map((transaction, index) => (
               <View

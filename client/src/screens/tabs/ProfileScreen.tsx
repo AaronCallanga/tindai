@@ -11,15 +11,15 @@ import { colors } from '@/navigation/colors';
 function getMigrationLabel(status: string | undefined) {
   switch (status) {
     case 'in_progress':
-      return 'Uploading local data...';
+      return 'Inaakyat ang tala mo...';
     case 'completed':
-      return 'Local data uploaded to cloud.';
+      return 'Naakyat na ang tala mo.';
     case 'needs_review':
-      return 'Some records need review.';
+      return 'May ilang tala na kailangang tingnan.';
     case 'failed':
-      return 'Upload failed. Retry by refreshing or resolving claim.';
+      return 'Hindi naakyat. Subukan ulit.';
     default:
-      return 'Waiting to sync.';
+      return 'Wala pang inaakyat.';
   }
 }
 
@@ -54,7 +54,7 @@ export function ProfileScreen() {
 
     const name = normalizedStoreName;
     if (!name) {
-      setStoreMessage('Store name cannot be empty.');
+      setStoreMessage('Lagyan ng pangalan ang tindahan.');
       return;
     }
 
@@ -64,14 +64,14 @@ export function ProfileScreen() {
     try {
       if (!isAuthenticated) {
         await renameLocalStore(name);
-        setStoreMessage('Store name saved locally.');
+        setStoreMessage('Napalitan na ang pangalan ng tindahan.');
         return;
       }
 
       const { data } = await supabase.auth.getSession();
       const accessToken = data.session?.access_token;
       if (!accessToken) {
-        setStoreMessage('Please sign in again to save your store name.');
+        setStoreMessage('Mag-login ulit para ma-save ang pangalan.');
         return;
       }
 
@@ -87,13 +87,13 @@ export function ProfileScreen() {
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(payload?.message ?? 'Could not save your store name.');
+        throw new Error(payload?.message ?? 'Hindi na-save ang pangalan ng tindahan.');
       }
 
       await refresh();
-      setStoreMessage('Store name saved.');
+      setStoreMessage('Napalitan na ang pangalan ng tindahan.');
     } catch (caughtError) {
-      setStoreMessage(caughtError instanceof Error ? caughtError.message : 'Could not save your store name.');
+      setStoreMessage(caughtError instanceof Error ? caughtError.message : 'Hindi na-save ang pangalan ng tindahan.');
     } finally {
       setIsSavingStore(false);
     }
@@ -110,24 +110,24 @@ export function ProfileScreen() {
 
   return (
     <ClientTabLayout
-      label="Profile"
-      title="Manage your account."
-      subtitle="Guest mode works fully offline. Connect account from here when you want cloud sync."
-      highlights={['Dashboard-first usage in guest mode', 'Store settings stay editable', 'Claim or discard safeguards on account switch']}
+      label="Account"
+      title="Ayusin ang account at tindahan mo."
+      subtitle="Pwede ka pa ring gumamit kahit walang account. Dito ka magkokonekta kapag handa ka na."
+      highlights={['Madaling palitan ang pangalan ng tindahan', 'Pwede gamitin kahit walang account', 'Kontrolado mo kung alin ang itutuloy na tala']}
     >
       <View style={styles.actionCard}>
-        <Text style={styles.actionTitle}>Store Settings</Text>
-        <Text style={styles.actionBody}>Store name is editable in both guest and signed-in modes.</Text>
+        <Text style={styles.actionTitle}>Pangalan ng tindahan</Text>
+        <Text style={styles.actionBody}>Pwede mo itong palitan anumang oras.</Text>
 
         <View style={styles.settingBlock}>
-          <Text style={styles.settingLabel}>Store name</Text>
+          <Text style={styles.settingLabel}>Pangalan</Text>
           <TextInput
             value={storeName}
             onChangeText={(value) => {
               setStoreName(value);
               setStoreMessage(null);
             }}
-            placeholder="My Store"
+            placeholder="Halimbawa: Nena Store"
             placeholderTextColor={colors.muted}
             style={styles.settingInput}
           />
@@ -135,11 +135,11 @@ export function ProfileScreen() {
 
         <View style={styles.readOnlyRow}>
           <View style={styles.readOnlyCard}>
-            <Text style={styles.readOnlyLabel}>Currency</Text>
+            <Text style={styles.readOnlyLabel}>Pera</Text>
             <Text style={styles.readOnlyValue}>{store?.currencyCode ?? 'PHP'}</Text>
           </View>
           <View style={styles.readOnlyCard}>
-            <Text style={styles.readOnlyLabel}>Timezone</Text>
+            <Text style={styles.readOnlyLabel}>Oras</Text>
             <Text style={styles.readOnlyValue}>{store?.timezone ?? 'Asia/Manila'}</Text>
           </View>
         </View>
@@ -149,22 +149,22 @@ export function ProfileScreen() {
           style={[styles.primaryButton, !canSaveStoreName && styles.buttonDisabled]}
           onPress={() => void saveStoreName()}
         >
-          {isSavingStore ? <ActivityIndicator color={colors.surface} size="small" /> : <Text style={styles.primaryLabel}>Save Store Name</Text>}
+          {isSavingStore ? <ActivityIndicator color={colors.surface} size="small" /> : <Text style={styles.primaryLabel}>I-save ang pangalan</Text>}
         </Pressable>
 
         {storeMessage ? <Text style={styles.storeMessage}>{storeMessage}</Text> : null}
       </View>
 
       <View style={styles.actionCard}>
-        <Text style={styles.actionTitle}>Cloud Sync</Text>
+        <Text style={styles.actionTitle}>Pagkonekta ng account</Text>
         {!isAuthenticated ? (
           <>
-            <Text style={styles.actionBody}>Your local data stays on this device until you connect an account.</Text>
+            <Text style={styles.actionBody}>Ang mga tala mo ay mananatili muna sa phone na ito.</Text>
             <Pressable style={styles.primaryButton} onPress={showSignUp}>
-              <Text style={styles.primaryLabel}>Create Account</Text>
+              <Text style={styles.primaryLabel}>Gumawa ng account</Text>
             </Pressable>
             <Pressable style={styles.secondaryButton} onPress={showLogin}>
-              <Text style={styles.secondaryLabel}>Sign In</Text>
+              <Text style={styles.secondaryLabel}>Mag-login</Text>
             </Pressable>
           </>
         ) : (
@@ -178,19 +178,19 @@ export function ProfileScreen() {
                   onPress={() => void handleResolveClaim('claim')}
                   disabled={isResolvingClaim}
                 >
-                  <Text style={styles.primaryLabel}>Claim This Data</Text>
+                  <Text style={styles.primaryLabel}>Ituloy ang mga tala</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.secondaryButton, isResolvingClaim && styles.buttonDisabled]}
                   onPress={() => void handleResolveClaim('discard')}
                   disabled={isResolvingClaim}
                 >
-                  <Text style={styles.secondaryLabel}>Discard Local Pending</Text>
+                  <Text style={styles.secondaryLabel}>Huwag ituloy ang mga tala</Text>
                 </Pressable>
               </View>
             ) : null}
             <Pressable style={styles.signOutButton} onPress={() => void signOut()}>
-              <Text style={styles.signOutText}>Sign Out</Text>
+              <Text style={styles.signOutText}>Mag-logout</Text>
             </Pressable>
           </>
         )}
