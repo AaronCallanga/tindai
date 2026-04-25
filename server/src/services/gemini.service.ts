@@ -1,4 +1,7 @@
 import { getEnv } from '../config/env';
+import type { GeminiTransactionVerification } from '../types/gemini';
+
+const ALLOWED_TRANSACTION_INTENTS = ['sale', 'restock', 'utang', 'unknown'] as const;
 
 type GeminiGenerateContentResponse = {
   candidates?: Array<{
@@ -46,4 +49,84 @@ export async function generateGeminiText(prompt: string): Promise<string | null>
   const payload = (await response.json()) as GeminiGenerateContentResponse;
   const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('').trim() ?? '';
   return text || null;
+}
+
+export function validateGeminiTransactionResponse(
+  rawResponse: string,
+): GeminiTransactionVerification {
+  try {
+    const parsed = JSON.parse(rawResponse) as Partial<GeminiTransactionVerification>;
+
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Response must be a JSON object');
+    }
+
+    if (!ALLOWED_TRANSACTION_INTENTS.includes(String(parsed.intent) as (typeof ALLOWED_TRANSACTION_INTENTS)[number])) {
+      throw new Error(`Invalid intent: ${String(parsed.intent)}`);
+    }
+
+    if (
+      typeof parsed.confidence !== 'number' ||
+      Number.isNaN(parsed.confidence) ||
+      parsed.confidence < 0 ||
+      parsed.confidence > 1
+    ) {
+      throw new Error(`Invalid confidence: ${String(parsed.confidence)}`);
+    }
+
+    if (!Array.isArray(parsed.items)) {
+      throw new Error('Items must be an array');
+    }
+
+    if (!parsed.credit || typeof parsed.credit.is_utang !== 'boolean') {
+      throw new Error('Invalid credit object');
+    }
+
+    if (!Array.isArray(parsed.notes)) {
+      throw new Error('Notes must be an array');
+    }
+
+    for (const item of parsed.items) {
+      if (!item || typeof item !== 'object') {
+        throw new Error('Invalid item entry');
+      }
+
+      if (typeof item.spoken_name !== 'string' || item.spoken_name.trim().length === 0) {
+        throw new Error('Invalid spoken_name');
+      }
+
+      if (
+        typeof item.matched_item_name !== 'string' ||
+        item.matched_item_name.trim().length === 0
+      ) {
+        throw new Error('Invalid matched_item_name');
+      }
+
+      if (
+        typeof item.quantity_delta !== 'number' ||
+        Number.isNaN(item.quantity_delta) ||
+        item.quantity_delta === 0
+      ) {
+        throw new Error('Invalid quantity_delta');
+      }
+    }
+
+    return {
+      intent: parsed.intent as GeminiTransactionVerification['intent'],
+      confidence: parsed.confidence,
+      items: parsed.items,
+      credit: {
+        is_utang: parsed.credit.is_utang,
+        customer_name:
+          typeof parsed.credit.customer_name === 'string' && parsed.credit.customer_name.trim().length > 0
+            ? parsed.credit.customer_name.trim()
+            : null,
+      },
+      notes: parsed.notes.map((note) => String(note)),
+    };
+  } catch (error) {
+    throw new Error(
+      `Gemini response validation failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }

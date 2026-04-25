@@ -134,6 +134,8 @@ function detectLanguageStyle(question: string): LanguageStyle {
   return 'english';
 }
 
+export { detectLanguageStyle };
+
 function detectAssistantIntent(question: string): AssistantIntent {
   const normalized = question.toLowerCase();
   const mutationSignals = [
@@ -544,7 +546,7 @@ export async function answerAssistantQueryForOwner(
       .update({
         status: 'answered',
         answer_text: answerText,
-        spoken_text: null,
+        spoken_text: answerText,
         actions: [],
         response_payload: responsePayload,
         answered_at: new Date().toISOString(),
@@ -559,7 +561,7 @@ export async function answerAssistantQueryForOwner(
       clientInteractionId: input.clientInteractionId,
       status: 'answered',
       answerText,
-      spokenText: null,
+      spokenText: answerText,
       actions: [],
     };
   } catch (error) {

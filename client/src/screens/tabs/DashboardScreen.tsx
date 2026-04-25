@@ -12,9 +12,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { detectLanguageStyle } from '@/features/assistant/assistantLanguageDetection';
 import type { CommandSource } from '@/features/commands/localCommandService';
 import { useLocalData } from '@/features/local-data/LocalDataContext';
 import type { ParserResult } from '@/features/parser/offlineParser';
+import { getLanguageCode, speakText, stopSpeaking } from '@/services/ttsService';
 
 type SpeechRecognitionStartOptions = {
   lang?: string;
@@ -86,7 +88,11 @@ export function DashboardScreen() {
   const [fallbackCustomerName, setFallbackCustomerName] = useState('');
   const [isSavingFallback, setIsSavingFallback] = useState(false);
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
-  const [assistantAnswer, setAssistantAnswer] = useState<string | null>(null);
+  const [assistantAnswer, setAssistantAnswer] = useState<{
+    questionText: string;
+    answerText: string;
+    spokenText: string | null;
+  } | null>(null);
   const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false);
   const hasSpeechRecognitionNative = speechRecognitionRuntime !== null;
 
@@ -161,8 +167,13 @@ export function DashboardScreen() {
           setPendingParserResult(null);
           setPendingCustomerName('');
           setIsSubmittingQuestion(true);
+          await stopSpeaking();
           const answer = await submitAssistantQuestion(rawText, source === 'voice' ? 'voice' : 'text');
-          setAssistantAnswer(answer.answerText);
+          setAssistantAnswer({
+            questionText: rawText,
+            answerText: answer.answerText,
+            spokenText: answer.spokenText,
+          });
           setCommandMessage('Nasagot na ang tanong mo.');
           return;
         }
@@ -187,6 +198,27 @@ export function DashboardScreen() {
     },
     [openFallback, submitAssistantQuestion, submitLocalCommand],
   );
+
+  const handleSpeakAssistantAnswer = useCallback(async () => {
+    if (!assistantAnswer?.spokenText) {
+      setCommandMessage('Wala pang babasahing sagot.');
+      return;
+    }
+
+    const languageStyle = detectLanguageStyle(assistantAnswer.questionText);
+    const result = await speakText(assistantAnswer.spokenText, {
+      language: getLanguageCode(languageStyle),
+    });
+
+    if (!result.spoken) {
+      setCommandMessage('Hindi mabasa nang malakas sa phone na ito.');
+      return;
+    }
+
+    if (result.fallbackUsed) {
+      setCommandMessage('Binasa muna sa English para tuloy ang sagot.');
+    }
+  }, [assistantAnswer]);
 
   const pendingNeedsCustomer =
     pendingParserResult?.intent === 'utang' &&
@@ -434,7 +466,25 @@ export function DashboardScreen() {
         {assistantAnswer ? (
           <View style={styles.assistantCard}>
             <Text style={styles.assistantTitle}>Sagot ni Tinday</Text>
-            <Text style={styles.assistantText}>{assistantAnswer}</Text>
+            <Text style={styles.assistantText}>{assistantAnswer.answerText}</Text>
+            <View style={styles.assistantActions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => void handleSpeakAssistantAnswer()}
+                style={styles.assistantActionButton}
+              >
+                <Ionicons color="#00604c" name="volume-high-outline" size={18} />
+                <Text style={styles.assistantActionText}>Basahin</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => void stopSpeaking()}
+                style={styles.assistantActionButton}
+              >
+                <Ionicons color="#00604c" name="stop-circle-outline" size={18} />
+                <Text style={styles.assistantActionText}>Ihinto</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : null}
 
@@ -822,6 +872,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 19,
     fontWeight: '600',
+  },
+  assistantActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  assistantActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cfe7dd',
+    backgroundColor: '#ffffff',
+  },
+  assistantActionText: {
+    color: '#00604c',
+    fontSize: 12,
+    fontWeight: '800',
   },
   confirmCard: {
     backgroundColor: '#ffffff',

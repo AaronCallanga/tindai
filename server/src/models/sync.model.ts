@@ -1,4 +1,10 @@
 import { getSupabaseAdminClient } from '../config/supabase';
+import { buildTransactionVerificationPrompt } from '../services/gemini-transaction-prompt';
+import {
+  generateGeminiText,
+  validateGeminiTransactionResponse,
+} from '../services/gemini.service';
+import type { GeminiTransactionVerification } from '../types/gemini';
 import { getStoreByOwnerId } from './store.model';
 
 export type VerifyTransactionItemInput = {
@@ -26,6 +32,8 @@ export type VerifyTransactionResult = {
   clientMutationId: string;
   status: 'synced' | 'needs_review' | 'failed';
   reason?: string;
+  geminiConfidence?: number;
+  geminiVerified?: boolean;
 };
 
 type CloudInventoryItem = {
@@ -51,6 +59,53 @@ function mapTransactionSource(source: VerifyTransactionInput['source']) {
 
 function normalizeName(value: string) {
   return value.trim().toLowerCase();
+}
+
+function sumQuantityByItemName(
+  items: Array<{
+    itemName: string;
+    quantityDelta: number;
+  }>,
+) {
+  const quantities = new Map<string, number>();
+
+  for (const item of items) {
+    const key = item.itemName.trim();
+    if (!key || item.quantityDelta === 0) {
+      continue;
+    }
+
+    quantities.set(key, (quantities.get(key) ?? 0) + item.quantityDelta);
+  }
+
+  return quantities;
+}
+
+function sumGeminiQuantityByItemName(result: GeminiTransactionVerification) {
+  const quantities = new Map<string, number>();
+
+  for (const item of result.items) {
+    const key = item.matched_item_name.trim();
+    if (!key || item.quantity_delta === 0) {
+      continue;
+    }
+
+    quantities.set(key, (quantities.get(key) ?? 0) + item.quantity_delta);
+  }
+
+  return quantities;
+}
+
+function getGeminiMovementType(intent: GeminiTransactionVerification['intent']) {
+  if (intent === 'restock') {
+    return 'restock';
+  }
+
+  if (intent === 'utang') {
+    return 'utang_sale';
+  }
+
+  return 'sale';
 }
 
 export async function verifyTransactionsForOwner(
@@ -98,13 +153,48 @@ export async function verifyTransactionsForOwner(
         results.push({
           clientMutationId: transaction.clientMutationId,
           status: 'synced',
+          geminiVerified: false,
         });
         continue;
       }
 
+      let geminiResult: GeminiTransactionVerification | null = null;
+      let geminiConfidence: number | undefined;
+      let geminiVerified = false;
+
+      if (transaction.items.length > 0) {
+        try {
+          const prompt = buildTransactionVerificationPrompt({
+            rawText: transaction.rawText,
+            storeInventoryContext: (initialItems ?? []).map((item) => ({
+              name: item.name,
+              aliases: item.aliases?.length ? item.aliases : [item.name],
+            })),
+            localParse: transaction.localParse,
+          });
+          const geminiResponse = await generateGeminiText(prompt);
+
+          if (geminiResponse) {
+            geminiResult = validateGeminiTransactionResponse(geminiResponse);
+            geminiConfidence = geminiResult.confidence;
+            geminiVerified = geminiResult.confidence >= 0.7;
+          }
+        } catch (error) {
+          console.warn('Gemini verification failed:', error);
+        }
+      }
+
+      const verifiedCustomerName =
+        geminiVerified && geminiResult?.credit.is_utang
+          ? geminiResult.credit.customer_name ?? transaction.customerName
+          : transaction.customerName;
+
       let customerId: string | null = null;
-      if (transaction.isUtang && transaction.customerName?.trim()) {
-        const customerName = transaction.customerName.trim();
+      if (
+        (transaction.isUtang || (geminiVerified && geminiResult?.credit.is_utang)) &&
+        verifiedCustomerName?.trim()
+      ) {
+        const customerName = verifiedCustomerName.trim();
         const { data: existingCustomer, error: existingCustomerError } = await supabase
           .from('customers')
           .select('id, display_name')
@@ -146,10 +236,22 @@ export async function verifyTransactionsForOwner(
           client_mutation_id: transaction.clientMutationId,
           source: mapTransactionSource(transaction.source),
           raw_text: transaction.rawText,
-          local_parse: transaction.localParse ?? {},
+          local_parse: {
+            ...(transaction.localParse ?? {}),
+            gemini_verification: geminiResult
+              ? {
+                  confidence: geminiResult.confidence,
+                  verified: geminiVerified,
+                  intent: geminiResult.intent,
+                  notes: geminiResult.notes,
+                  credit: geminiResult.credit,
+                  items: geminiResult.items,
+                }
+              : null,
+          },
           parser_source: transaction.parserSource,
           sync_status: 'verified',
-          is_utang: transaction.isUtang,
+          is_utang: geminiVerified ? Boolean(geminiResult?.credit.is_utang) : transaction.isUtang,
           occurred_at: transaction.occurredAt ?? nowIso,
           synced_at: nowIso,
           verified_at: nowIso,
@@ -161,7 +263,7 @@ export async function verifyTransactionsForOwner(
         throw new Error('Unable to create transaction.');
       }
 
-      let utangAmount = 0;
+      let localUtangAmount = 0;
       for (const itemInput of transaction.items) {
         if (!itemInput.itemName?.trim() || itemInput.quantityDelta === 0) {
           continue;
@@ -192,7 +294,7 @@ export async function verifyTransactionsForOwner(
         }
 
         const unitPrice = Number(itemInput.unitPrice) || Number(inventoryItem.price) || 0;
-        utangAmount += transaction.isUtang ? Math.abs(itemInput.quantityDelta) * unitPrice : 0;
+        localUtangAmount += transaction.isUtang ? Math.abs(itemInput.quantityDelta) * unitPrice : 0;
 
         const { data: createdTransactionItem, error: createTransactionItemError } = await supabase
           .from('transaction_items')
@@ -238,13 +340,13 @@ export async function verifyTransactionsForOwner(
         }
       }
 
-      if (transaction.isUtang && customerId && utangAmount > 0) {
+      if (transaction.isUtang && customerId && localUtangAmount > 0) {
         const { error: createUtangError } = await supabase.from('utang_entries').insert({
           store_id: store.id,
           customer_id: customerId,
           transaction_id: createdTransaction.id,
           entry_type: 'credit_sale',
-          amount_delta: utangAmount,
+          amount_delta: localUtangAmount,
           note: transaction.rawText,
           client_mutation_id: transaction.clientMutationId,
           occurred_at: transaction.occurredAt ?? nowIso,
@@ -255,9 +357,123 @@ export async function verifyTransactionsForOwner(
         }
       }
 
+      if (geminiVerified && geminiResult) {
+        const localQuantities = sumQuantityByItemName(
+          transaction.items.map((item) => ({
+            itemName: item.itemName,
+            quantityDelta: item.quantityDelta,
+          })),
+        );
+        const geminiQuantities = sumGeminiQuantityByItemName(geminiResult);
+        const correctionItemNames = new Set([
+          ...Array.from(localQuantities.keys()),
+          ...Array.from(geminiQuantities.keys()),
+        ]);
+
+        let correctionIndex = 0;
+        for (const itemName of correctionItemNames) {
+          const localQuantity = localQuantities.get(itemName) ?? 0;
+          const geminiQuantity = geminiQuantities.get(itemName) ?? 0;
+          const correctionDelta = geminiQuantity - localQuantity;
+
+          if (correctionDelta === 0) {
+            continue;
+          }
+
+          let inventoryItem = inventoryByName.get(normalizeName(itemName));
+
+          if (!inventoryItem) {
+            const { data: createdItem, error: createItemError } = await supabase
+              .from('inventory_items')
+              .insert({
+                store_id: store.id,
+                name: itemName,
+                unit: 'pcs',
+                price: 0,
+                aliases: [],
+              })
+              .select('id, name, unit, price, aliases')
+              .single<CloudInventoryItem>();
+
+            if (createItemError || !createdItem) {
+              throw new Error(`Unable to create correction item: ${itemName}.`);
+            }
+
+            inventoryItem = createdItem;
+            inventoryByName.set(normalizeName(itemName), createdItem);
+          }
+
+          const { error: correctionMovementError } = await supabase.from('inventory_movements').insert({
+            store_id: store.id,
+            item_id: inventoryItem.id,
+            transaction_id: createdTransaction.id,
+            movement_type: 'gemini_correction',
+            quantity_delta: correctionDelta,
+            reason: transaction.rawText,
+            created_by: ownerId,
+            client_mutation_id: `${transaction.clientMutationId}:gemini:${correctionIndex}`,
+            occurred_at: transaction.occurredAt ?? nowIso,
+            metadata: {
+              gemini_intent: geminiResult.intent,
+              gemini_confidence: geminiResult.confidence,
+              local_quantity_delta: localQuantity,
+              verified_quantity_delta: geminiQuantity,
+            },
+          });
+
+          if (correctionMovementError) {
+            throw new Error('Unable to create Gemini correction movement.');
+          }
+
+          correctionIndex += 1;
+        }
+
+        const geminiUnitPriceByName = new Map<string, number>();
+        for (const item of geminiResult.items) {
+          const normalizedItemName = normalizeName(item.matched_item_name);
+          const inventoryItem = inventoryByName.get(normalizedItemName);
+          const localMatch = transaction.items.find(
+            (transactionItem) =>
+              normalizeName(transactionItem.itemName) === normalizedItemName ||
+              normalizeName(transactionItem.matchedAlias ?? '') === normalizeName(item.spoken_name),
+          );
+          const unitPrice = Number(localMatch?.unitPrice) || Number(inventoryItem?.price) || 0;
+          geminiUnitPriceByName.set(item.matched_item_name, unitPrice);
+        }
+
+        const geminiUtangAmount =
+          geminiResult.credit.is_utang
+            ? geminiResult.items.reduce(
+                (total, item) =>
+                  total + Math.abs(item.quantity_delta) * (geminiUnitPriceByName.get(item.matched_item_name) ?? 0),
+                0,
+              )
+            : 0;
+        const utangCorrectionAmount = geminiUtangAmount - localUtangAmount;
+
+        if (customerId && utangCorrectionAmount !== 0) {
+          const { error: utangAdjustmentError } = await supabase.from('utang_entries').insert({
+            store_id: store.id,
+            customer_id: customerId,
+            transaction_id: createdTransaction.id,
+            entry_type: 'adjustment',
+            amount_delta: utangCorrectionAmount,
+            note: `Gemini verification correction: ${transaction.rawText}`,
+            client_mutation_id: `${transaction.clientMutationId}:utang-adjustment`,
+            occurred_at: transaction.occurredAt ?? nowIso,
+          });
+
+          if (utangAdjustmentError) {
+            throw new Error('Unable to create Gemini utang adjustment.');
+          }
+        }
+      }
+
       results.push({
         clientMutationId: transaction.clientMutationId,
         status: 'synced',
+        geminiConfidence,
+        geminiVerified,
       });
     } catch (error) {
       results.push({

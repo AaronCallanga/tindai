@@ -12,6 +12,7 @@ type InventoryRecord = {
   name: string;
   aliases: string[] | null;
   unit: string;
+  cost: number | null;
   price: number;
   current_stock: number;
   low_stock_threshold: number;
@@ -52,7 +53,7 @@ export class RemoteDataSource {
   async getInventoryItems(storeId: string): Promise<LocalInventoryItem[]> {
     const { data, error } = await supabase
       .from('inventory_items')
-      .select('id, store_id, name, aliases, unit, price, current_stock, low_stock_threshold, updated_at')
+      .select('id, store_id, name, aliases, unit, cost, price, current_stock, low_stock_threshold, updated_at')
       .eq('store_id', storeId)
       .eq('is_active', true)
       .is('archived_at', null)
@@ -69,6 +70,7 @@ export class RemoteDataSource {
       name: item.name,
       aliases: item.aliases ?? [],
       unit: item.unit,
+      cost: item.cost,
       price: Number(item.price),
       currentStock: Number(item.current_stock),
       lowStockThreshold: Number(item.low_stock_threshold),

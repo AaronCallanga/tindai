@@ -3,33 +3,26 @@ import { describe, expect, it } from 'vitest';
 import { appFlowReducer, getActiveRoute, initialAppFlowState } from '@/context/appFlow';
 
 describe('appFlowReducer', () => {
-  it('starts on tabs while onboarding remains incomplete', () => {
+  it('starts on auth choice while onboarding remains incomplete', () => {
     expect(getActiveRoute(initialAppFlowState)).toEqual({
-      kind: 'tabs',
+      kind: 'authChoice',
     });
-    expect(initialAppFlowState.hasCompletedOnboarding).toBe(false);
+    expect(initialAppFlowState.onboardingCompleted).toBe(false);
   });
 
-  it('advances through onboarding and marks it complete on final step', () => {
-    const step2 = appFlowReducer(initialAppFlowState, { type: 'advanceOnboarding' });
-    const step3 = appFlowReducer(step2, { type: 'advanceOnboarding' });
-    const done = appFlowReducer(step3, { type: 'advanceOnboarding' });
+  it('completes onboarding and moves authenticated users to tabs', () => {
+    const guestChosen = appFlowReducer(initialAppFlowState, { type: 'chooseGuestMode' });
+    const done = appFlowReducer(guestChosen, { type: 'completeOnboarding' });
 
-    expect(step2.onboardingStep).toBe(2);
-    expect(step3.onboardingStep).toBe(3);
-    expect(done.hasCompletedOnboarding).toBe(true);
+    expect(done.onboardingCompleted).toBe(true);
     expect(getActiveRoute(done)).toEqual({ kind: 'tabs' });
   });
 
-  it('skips onboarding while remaining on tabs', () => {
-    const skipped = appFlowReducer(initialAppFlowState, { type: 'skipOnboarding' });
-
-    expect(skipped.hasCompletedOnboarding).toBe(true);
-    expect(getActiveRoute(skipped)).toEqual({ kind: 'tabs' });
-  });
-
-  it('keeps signed-out users in tabs by default', () => {
-    const signedIn = appFlowReducer(initialAppFlowState, { type: 'signIn' });
+  it('keeps signed-out users in onboarding flow until onboarding is completed', () => {
+    const signedIn = appFlowReducer(
+      appFlowReducer(initialAppFlowState, { type: 'completeOnboarding' }),
+      { type: 'signIn' },
+    );
     const signedOut = appFlowReducer(signedIn, { type: 'signOut' });
 
     expect(getActiveRoute(signedIn)).toEqual({ kind: 'tabs' });
@@ -43,6 +36,6 @@ describe('appFlowReducer', () => {
 
     expect(getActiveRoute(signUp)).toEqual({ kind: 'auth', screen: 'signUp' });
     expect(getActiveRoute(login)).toEqual({ kind: 'auth', screen: 'login' });
-    expect(getActiveRoute(closed)).toEqual({ kind: 'tabs' });
+    expect(getActiveRoute(closed)).toEqual({ kind: 'authChoice' });
   });
 });
