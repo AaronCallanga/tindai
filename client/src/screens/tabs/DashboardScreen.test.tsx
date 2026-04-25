@@ -23,6 +23,7 @@ let mockedAuthMode: 'guest' | 'authenticated' = 'authenticated';
 let mockedMicrophonePermission: 'granted' | 'denied' | 'pending' = 'granted';
 let mockedAppMode: 'guest' | 'authenticated' = 'authenticated';
 let mockedSyncNotice: string | null = null;
+let mockedBottomInset = 0;
 
 vi.mock('@expo/vector-icons', () => ({
   Ionicons: ({ ...props }: { children?: React.ReactNode }) => createElement('mock-icon', props),
@@ -46,6 +47,12 @@ vi.mock('react-native', () => ({
 
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: { children?: React.ReactNode }) => createElement('safe-area-view', props, children),
+  useSafeAreaInsets: () => ({
+    top: 0,
+    right: 0,
+    bottom: mockedBottomInset,
+    left: 0,
+  }),
 }));
 
 vi.mock('expo-speech-recognition', () => ({
@@ -123,6 +130,24 @@ function findTextNodes(tree: TestRenderer.ReactTestRenderer, text: string) {
   );
 }
 
+function findByTestId(tree: TestRenderer.ReactTestRenderer, testID: string) {
+  return tree.root.find((node) => node.props.testID === testID);
+}
+
+function flattenStyle(style: unknown) {
+  if (Array.isArray(style)) {
+    return style.reduce<Record<string, unknown>>(
+      (accumulator, current) => ({
+        ...accumulator,
+        ...flattenStyle(current),
+      }),
+      {},
+    );
+  }
+
+  return typeof style === 'object' && style !== null ? (style as Record<string, unknown>) : {};
+}
+
 function findIconNodes(tree: TestRenderer.ReactTestRenderer, name: string) {
   return tree.root.findAll((node) => String(node.type) === 'mock-icon' && node.props.name === name);
 }
@@ -152,6 +177,7 @@ describe('DashboardScreen', () => {
     mockedMicrophonePermission = 'granted';
     mockedAppMode = 'authenticated';
     mockedSyncNotice = null;
+    mockedBottomInset = 0;
     mockedRefresh.mockClear();
     mockedShowLogin.mockClear();
     mockedRequestMicrophonePermission.mockClear();
@@ -175,6 +201,8 @@ describe('DashboardScreen', () => {
     expect(findTextNodes(tree, 'Tindahan')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Tap para magsalita ng utos')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Produkto')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'BOSIS')).toHaveLength(0);
+    expect(findTextNodes(tree, 'Hindi pa puwede ang voice input dito')).toHaveLength(0);
   });
 
   it('shows guest backup messaging and the add-item action', async () => {
@@ -195,5 +223,35 @@ describe('DashboardScreen', () => {
     expect(findTextNodes(tree, 'Malapit maubos')).not.toHaveLength(0);
     expect(findIconNodes(tree, 'remove')).not.toHaveLength(0);
     expect(findIconNodes(tree, 'add')).not.toHaveLength(0);
+  });
+
+  it('renders the quick-entry sheet edge to edge above the tab bar', async () => {
+    const tree = await renderDashboardScreen();
+
+    await act(async () => {
+      findByTestId(tree, 'dashboard-fallback-trigger').props.onPress();
+    });
+
+    expect(findByTestId(tree, 'dashboard-fallback-backdrop').props.style).toMatchObject({
+      padding: 0,
+    });
+    expect(flattenStyle(findByTestId(tree, 'dashboard-fallback-sheet').props.style)).toMatchObject({
+      width: '100%',
+      alignSelf: 'stretch',
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+    });
+  });
+
+  it('keeps the quick-entry actions close to the bottom when there is no device inset', async () => {
+    const tree = await renderDashboardScreen();
+
+    await act(async () => {
+      findByTestId(tree, 'dashboard-fallback-trigger').props.onPress();
+    });
+
+    expect(flattenStyle(findByTestId(tree, 'dashboard-fallback-sheet').props.style)).toMatchObject({
+      paddingBottom: 12,
+    });
   });
 });

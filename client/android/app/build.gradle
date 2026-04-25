@@ -125,10 +125,11 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            if (!hasReleaseKeystoreProperties) {
-                throw new GradleException("Missing android/key.properties for release signing. Generate a release keystore before building a distributable APK.")
+            if (hasReleaseKeystoreProperties) {
+                signingConfig signingConfigs.release
+            } else {
+                logger.lifecycle("android/key.properties not found. Building an unsigned release APK; add a release keystore for a distributable build.")
             }
-            signingConfig signingConfigs.release
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

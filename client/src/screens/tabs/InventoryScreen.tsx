@@ -556,8 +556,8 @@ export function InventoryScreen() {
       </Modal>
 
       <Modal animationType="slide" transparent visible={isAddItemVisible} onRequestClose={() => setIsAddItemVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.sheet}>
+        <View style={styles.modalBackdrop} testID="inventory-add-backdrop">
+          <View style={styles.sheet} testID="inventory-add-sheet">
             <Text style={styles.sheetTitle}>Magdagdag ng item</Text>
 
             <Text style={styles.sheetLabel}>Pangalan ng item</Text>
@@ -1022,12 +1022,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(19, 42, 34, 0.28)',
     flex: 1,
     justifyContent: 'flex-end',
-    padding: 12,
+    padding: 0,
   },
   sheet: {
     backgroundColor: colors.surface,
-    borderRadius: 28,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     padding: 18,
+    paddingBottom: 32,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   sheetTitle: {
     color: colors.text,

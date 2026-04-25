@@ -13,6 +13,8 @@ An Expo + TypeScript starter with:
 3. Start the app: `npm run start`
 4. Open on iOS, Android, or web from the Expo dev tools
 
+Android native builds look for the SDK in `ANDROID_HOME`, `ANDROID_SDK_ROOT`, or the default macOS path at `~/Library/Android/sdk`.
+
 ## Android Dev Client (Voice Input)
 
 Voice input uses native speech recognition, so use a development build (not Expo Go).

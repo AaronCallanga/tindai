@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { mobileCopy } from "@/copy/mobileCopy";
 import { detectLanguageStyle } from "@/features/assistant/assistantLanguageDetection";
@@ -85,6 +85,7 @@ function getStoreInitial(storeName: string | undefined) {
 }
 
 export function DashboardScreen() {
+  const insets = useSafeAreaInsets();
   const {
     authMode,
     microphonePermission,
@@ -424,9 +425,7 @@ export function DashboardScreen() {
 
   const startListening = useCallback(async () => {
     if (!hasSpeechRecognitionNative) {
-      setCommandMessage(
-        "Hindi pa puwede ang voice input dito. I-type muna ang utos mo.",
-      );
+      setCommandMessage(null);
       return;
     }
 
@@ -665,9 +664,6 @@ export function DashboardScreen() {
               size={56}
             />
           </TouchableOpacity>
-          <Text style={styles.voiceLabel}>
-            {isListening ? "NAKIKINIG..." : "BOSIS"}
-          </Text>
           <Text style={styles.voiceTitle}>Tap para magsalita ng utos</Text>
           <Pressable
             onPress={() => setIsAddItemVisible(true)}
@@ -706,6 +702,7 @@ export function DashboardScreen() {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => openFallback()}
+            testID="dashboard-fallback-trigger"
             style={styles.fallbackButton}
           >
             <Ionicons color="#00604c" name="create-outline" size={20} />
@@ -921,7 +918,9 @@ export function DashboardScreen() {
         onRequestClose={() => setIsAddItemVisible(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
+          <View
+            style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 12) }]}
+          >
             <Text style={styles.modalTitle}>Magdagdag ng item</Text>
 
             <Text style={styles.modalLabel}>Pangalan ng item</Text>
@@ -995,8 +994,11 @@ export function DashboardScreen() {
         visible={isFallbackVisible}
         onRequestClose={() => setIsFallbackVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
+        <View style={styles.modalBackdrop} testID="dashboard-fallback-backdrop">
+          <View
+            style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 12) }]}
+            testID="dashboard-fallback-sheet"
+          >
             <Text style={styles.modalTitle}>Mabilis na tala</Text>
             <View style={styles.intentRow}>
               {[
@@ -1266,11 +1268,6 @@ const styles = StyleSheet.create({
   },
   voiceButtonDisabled: {
     backgroundColor: "#8ba79e",
-  },
-  voiceLabel: {
-    color: "#00604c",
-    fontSize: 12,
-    fontWeight: "800",
   },
   voiceTitle: {
     fontSize: 24,
@@ -1566,14 +1563,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.35)",
     justifyContent: "flex-end",
+    padding: 0,
   },
   modalSheet: {
     backgroundColor: "#ffffff",
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     padding: 16,
     gap: 10,
     maxHeight: "85%",
+    width: "100%",
+    alignSelf: "stretch",
   },
   modalTitle: {
     color: "#181d1b",

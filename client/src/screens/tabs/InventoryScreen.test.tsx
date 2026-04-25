@@ -290,6 +290,24 @@ describe('InventoryScreen', () => {
     expect(mockedSetParams).toHaveBeenCalledWith({ openAddItemRequestId: undefined });
   });
 
+  it('renders the add-item sheet edge to edge above the tab bar', async () => {
+    const tree = await renderInventoryScreen();
+
+    await act(async () => {
+      findByTestId(tree, 'inventory-add-open-button').props.onPress();
+    });
+
+    expect(findByTestId(tree, 'inventory-add-backdrop').props.style).toMatchObject({
+      padding: 0,
+    });
+    expect(findByTestId(tree, 'inventory-add-sheet').props.style).toMatchObject({
+      width: '100%',
+      alignSelf: 'stretch',
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+    });
+  });
+
   it('shows an empty inventory state when there are no items yet', async () => {
     mockedInventoryItems = [];
 
