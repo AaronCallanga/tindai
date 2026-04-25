@@ -35,10 +35,10 @@ const styles = StyleSheet.create({
   },
   input: {
     minHeight: 54,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.86)',
+    backgroundColor: colors.surface,
     color: colors.text,
     paddingHorizontal: 16,
     fontSize: 15,

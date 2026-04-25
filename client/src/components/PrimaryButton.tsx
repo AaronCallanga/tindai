@@ -29,31 +29,33 @@ export function PrimaryButton({
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 54,
-    borderRadius: 16,
+    minHeight: 56,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
   } satisfies ViewStyle,
   solid: {
     backgroundColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.primaryDeep,
   },
   ghost: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderColor: 'rgba(31, 122, 99, 0.24)',
+    backgroundColor: colors.surface,
   },
   pressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.94,
+    transform: [{ scale: 0.985 }],
   },
   label: {
     color: colors.surface,
     fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   ghostLabel: {
-    color: colors.text,
+    color: colors.primaryDeep,
   },
 });

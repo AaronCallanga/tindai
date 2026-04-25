@@ -14,23 +14,14 @@ export function HomeTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerShown: true,
-        headerStyle: {
-          backgroundColor: colors.background,
-        },
-        headerTitleStyle: {
-          color: colors.text,
-          fontWeight: '700',
-        },
+        headerShown: false,
         sceneStyle: {
           backgroundColor: colors.background,
         },
-        headerShadowVisible: false,
-        headerTintColor: colors.text,
         tabBarActiveTintColor: colors.primaryDeep,
         tabBarInactiveTintColor: colors.muted,
         tabBarStyle: {
-          backgroundColor: colors.background,
+          backgroundColor: colors.surface,
           borderTopColor: colors.border,
           height: 76,
           paddingBottom: 12,
@@ -91,7 +82,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconWrapActive: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.card,
   },
   dashboardIconWrap: {
     width: 42,
@@ -99,6 +90,6 @@ const styles = StyleSheet.create({
     borderRadius: 21,
   },
   dashboardIconWrapActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryDeep,
   },
 });

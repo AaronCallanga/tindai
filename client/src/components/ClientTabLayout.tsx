@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from '@/navigation/colors';
 
@@ -19,28 +20,34 @@ export function ClientTabLayout({
   children,
 }: ClientTabLayoutProps) {
   return (
-    <ScrollView contentContainerStyle={styles.contentContainer} style={styles.screen}>
-      <View style={styles.heroCard}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <ScrollView contentContainerStyle={styles.contentContainer} style={styles.screen}>
+        <View style={styles.heroCard}>
+          <Text style={styles.label}>{label}</Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
 
-        <View style={styles.highlights}>
-          {highlights.map((highlight) => (
-            <View key={highlight} style={styles.highlightCard}>
-              <View style={styles.highlightDot} />
-              <Text style={styles.highlightText}>{highlight}</Text>
-            </View>
-          ))}
+          <View style={styles.highlights}>
+            {highlights.map((highlight) => (
+              <View key={highlight} style={styles.highlightCard}>
+                <View style={styles.highlightDot} />
+                <Text style={styles.highlightText}>{highlight}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
 
-      {children}
-    </ScrollView>
+        {children}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -50,12 +57,12 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   heroCard: {
-    gap: 10,
-    borderRadius: 28,
+    gap: 12,
+    borderRadius: 30,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    padding: 22,
+    padding: 24,
   },
   label: {
     color: colors.primaryDeep,
@@ -72,7 +79,7 @@ const styles = StyleSheet.create({
   subtitle: {
     color: colors.muted,
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 23,
   },
   highlights: {
     gap: 10,
@@ -83,7 +90,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderRadius: 16,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.card,
     paddingHorizontal: 14,
     paddingVertical: 13,
   },
@@ -91,7 +98,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 999,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.secondary,
   },
   highlightText: {
     color: colors.text,

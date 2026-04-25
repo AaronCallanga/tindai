@@ -31,7 +31,7 @@ export function OnboardingLayout({
   onSkip,
 }: OnboardingLayoutProps) {
   return (
-    <LinearGradient colors={['#fffaf5', '#fff1dd', '#ffe2bf']} style={styles.screen}>
+    <LinearGradient colors={[colors.background, '#FBF3D7', '#EEE0B4']} style={styles.screen}>
       <View style={styles.glowTop} />
       <View style={styles.glowBottom} />
 
@@ -97,11 +97,11 @@ const styles = StyleSheet.create({
   glowTop: {
     position: 'absolute',
     top: -80,
-    right: -30,
-    width: 220,
-    height: 220,
-    borderRadius: 220,
-    backgroundColor: 'rgba(251, 146, 60, 0.14)',
+    right: -40,
+    width: 230,
+    height: 230,
+    borderRadius: 230,
+    backgroundColor: 'rgba(31, 122, 99, 0.12)',
   },
   glowBottom: {
     position: 'absolute',
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: 260,
-    backgroundColor: 'rgba(194, 65, 12, 0.12)',
+    backgroundColor: 'rgba(242, 153, 74, 0.14)',
   },
   headerRow: {
     flexDirection: 'row',
@@ -125,10 +125,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   skipButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.66)',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -146,10 +146,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(194, 65, 12, 0.12)',
+    backgroundColor: 'rgba(31, 122, 99, 0.12)',
   },
   progressDotActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.secondary,
   },
   content: {
     flex: 1,
@@ -183,8 +183,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    padding: 22,
+    backgroundColor: 'rgba(255, 253, 245, 0.9)',
+    padding: 24,
   },
   panelBadge: {
     alignSelf: 'flex-start',
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryDeep,
   },
   panelBadgeText: {
     color: colors.surface,
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderRadius: 16,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.card,
     paddingHorizontal: 14,
     paddingVertical: 13,
   },
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 999,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.secondary,
   },
   pointText: {
     color: colors.text,

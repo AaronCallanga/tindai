@@ -40,7 +40,7 @@ export function AuthLayout({
   };
 
   return (
-    <LinearGradient colors={['#fffaf5', '#ffefdc', '#ffe1c3']} style={styles.screen}>
+    <LinearGradient colors={[colors.background, '#F8F1DA', '#EDE2BD']} style={styles.screen}>
       <View style={styles.glowTop} />
       <View style={styles.glowBottom} />
 
@@ -80,36 +80,36 @@ const styles = StyleSheet.create({
   },
   glowTop: {
     position: 'absolute',
-    top: -60,
-    right: -20,
-    width: 220,
-    height: 220,
-    borderRadius: 220,
-    backgroundColor: 'rgba(251, 146, 60, 0.18)',
+    top: -72,
+    right: -24,
+    width: 240,
+    height: 240,
+    borderRadius: 240,
+    backgroundColor: 'rgba(31, 122, 99, 0.14)',
   },
   glowBottom: {
     position: 'absolute',
-    bottom: -100,
-    left: -30,
-    width: 260,
-    height: 260,
-    borderRadius: 260,
-    backgroundColor: 'rgba(194, 65, 12, 0.12)',
+    bottom: -110,
+    left: -40,
+    width: 280,
+    height: 280,
+    borderRadius: 280,
+    backgroundColor: 'rgba(242, 201, 76, 0.16)',
   },
   card: {
     gap: 22,
-    borderRadius: 30,
+    borderRadius: 32,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.76)',
-    padding: 24,
+    backgroundColor: 'rgba(255, 253, 245, 0.92)',
+    padding: 26,
   },
   badge: {
     alignSelf: 'flex-start',
     borderRadius: 999,
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    backgroundColor: colors.card,
+    paddingHorizontal: 15,
+    paddingVertical: 9,
   },
   badgeText: {
     color: colors.primaryDeep,
@@ -125,6 +125,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 30,
     fontWeight: '800',
+    lineHeight: 36,
   },
   subtitle: {
     color: colors.muted,
