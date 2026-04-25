@@ -144,13 +144,13 @@ describe('onboarding screens', () => {
     const tree = await renderScreen(createElement(AuthChoiceScreen));
 
     expect(findTextNodes(tree, 'Hakbang 1 ng 4')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Boses-una na inventory para sa tindahan mo.')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Imbentaryong pinapadali ng boses para sa tindahan mo.')).not.toHaveLength(0);
 
     await act(async () => {
-      await findPressable(tree, 'Mag-sign In o Gumawa ng Account').props.onPress();
+      await findPressable(tree, 'Mag-sign in o gumawa ng account').props.onPress();
     });
     await act(async () => {
-      await findPressable(tree, 'Simulan bilang Guest').props.onPress();
+      await findPressable(tree, 'Subukan muna bilang guest').props.onPress();
     });
 
     expect(mockedShowLogin).toHaveBeenCalledTimes(1);
@@ -161,7 +161,7 @@ describe('onboarding screens', () => {
     const tree = await renderScreen(createElement(LoginScreen));
 
     expect(findTextNodes(tree, 'Hakbang 2 ng 4')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Ikonekta ang account mo.')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Mag-sign in sa account mo.')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'G')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Mag-sign in gamit ang Google')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Magpatuloy')).not.toHaveLength(0);
@@ -172,12 +172,12 @@ describe('onboarding screens', () => {
     const tree = await renderScreen(createElement(PermissionsScreen));
 
     expect(findTextNodes(tree, 'Hakbang 3 ng 4')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Kailangan namin ng kaunting pahintulot.')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Kailangan namin ng ilang pahintulot.')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Mikropono')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Storage')).not.toHaveLength(0);
 
     await act(async () => {
-      await findPressable(tree, 'Payagan at Magpatuloy').props.onPress();
+      await findPressable(tree, 'Payagan at magpatuloy').props.onPress();
     });
 
     expect(mockedRequestMicrophonePermission).toHaveBeenCalledTimes(1);
@@ -193,7 +193,7 @@ describe('onboarding screens', () => {
     expect(findTextNodes(tree, 'Nakabenta ako ng tatlong Lucky Me at isang Coke Mismo.')).not.toHaveLength(0);
 
     await act(async () => {
-      findPressable(tree, 'Simulan na ang Tindahan').props.onPress();
+      findPressable(tree, 'Simulan na ang paggamit').props.onPress();
     });
 
     expect(mockedOnDismiss).toHaveBeenCalledTimes(1);

@@ -180,7 +180,7 @@ export function DashboardScreen() {
           setCommandText('');
           setPendingParserResult(null);
           setPendingCustomerName('');
-          setCommandMessage('Naitala na. Hihintayin lang ang internet para maipadala.');
+          setCommandMessage('Naitala na. Ipapasa ito kapag may internet na.');
           return;
         }
 
@@ -195,20 +195,20 @@ export function DashboardScreen() {
             answerText: answer.answerText,
             spokenText: answer.spokenText,
           });
-          setCommandMessage('Nasagot na ang tanong mo.');
+          setCommandMessage('May sagot na ang tanong mo.');
           return;
         }
 
         if (result.status === 'needs_confirmation') {
           setPendingParserResult(result.parserResult);
           setPendingCustomerName(result.parserResult.credit.customer_name ?? '');
-          setCommandMessage('Pakikumpirma muna bago itala.');
+          setCommandMessage('Pakikumpirma muna bago i-save.');
           return;
         }
 
         setPendingParserResult(null);
         setPendingCustomerName('');
-        setCommandMessage('Hindi malinaw ang utos. Pakiulit o ayusin ang sulat.');
+        setCommandMessage('Hindi malinaw ang sinabi mo. Pakiulit o ayusin ang pag-type.');
         openFallback();
       } catch (caughtError) {
         setCommandMessage(caughtError instanceof Error ? caughtError.message : 'Hindi naitala. Subukan ulit.');
@@ -222,7 +222,7 @@ export function DashboardScreen() {
 
   const handleSpeakAssistantAnswer = useCallback(async () => {
     if (!assistantAnswer?.spokenText) {
-      setCommandMessage('Wala pang babasahing sagot.');
+      setCommandMessage('Wala pang sagot na puwedeng basahin.');
       return;
     }
 
@@ -237,7 +237,7 @@ export function DashboardScreen() {
     }
 
     if (result.fallbackUsed) {
-      setCommandMessage('Binasa muna sa English para tuloy ang sagot.');
+      setCommandMessage('Binasa muna sa English para tuloy-tuloy ang sagot.');
     }
   }, [assistantAnswer]);
 
@@ -265,7 +265,7 @@ export function DashboardScreen() {
       setPendingParserResult(null);
       setPendingCustomerName('');
       setCommandText('');
-      setCommandMessage('Naitala na. Hihintayin lang ang internet para maipadala.');
+      setCommandMessage('Naitala na. Ipapasa ito kapag may internet na.');
     } catch (caughtError) {
       setCommandMessage(caughtError instanceof Error ? caughtError.message : 'Hindi naituloy. Subukan ulit.');
     } finally {
@@ -280,7 +280,7 @@ export function DashboardScreen() {
 
       try {
         await applyManualAdjustment(itemId, direction);
-        setCommandMessage('Nabago na ang bilang. Hihintayin lang ang internet para maipadala.');
+        setCommandMessage('Nabago na ang bilang. Ipapasa ito kapag may internet na.');
       } catch (caughtError) {
         setCommandMessage(caughtError instanceof Error ? caughtError.message : 'Hindi nabago ang bilang. Subukan ulit.');
       } finally {
@@ -302,17 +302,17 @@ export function DashboardScreen() {
     }
 
     if (!Number.isInteger(quantity) || quantity < 0) {
-      setItemFormError('Ang quantity ay dapat zero o mas mataas.');
+      setItemFormError('Ang dami ay dapat zero o mas mataas.');
       return;
     }
 
     if (Number.isNaN(cost) || cost < 0) {
-      setItemFormError('Ang cost price ay dapat zero o mas mataas.');
+      setItemFormError('Ang puhunan ay dapat zero o mas mataas.');
       return;
     }
 
     if (Number.isNaN(price) || price < 0) {
-      setItemFormError('Ang selling price ay dapat zero o mas mataas.');
+      setItemFormError('Ang presyo ng benta ay dapat zero o mas mataas.');
       return;
     }
 
@@ -340,14 +340,14 @@ export function DashboardScreen() {
 
   const startListening = useCallback(async () => {
     if (!hasSpeechRecognitionNative) {
-      setCommandMessage('Voice input needs a development build. You can type your command instead.');
+      setCommandMessage('Hindi pa available ang voice input dito. Puwede mong i-type ang utos mo.');
       return;
     }
 
     if (microphonePermission === 'denied') {
       const nextStatus = await requestMicrophonePermission();
       if (nextStatus === 'denied') {
-        setCommandMessage('Kailangan ng microphone access para sa voice input. I-tap ang mic button para i-enable sa Settings.');
+        setCommandMessage('Kailangan ng access sa mikropono. I-tap ang mic button para payagan ito sa Settings.');
         await openDeviceSettings();
         return;
       }
@@ -515,12 +515,12 @@ export function DashboardScreen() {
         {showGuestBanner ? (
           <View style={styles.bannerCard}>
             <View style={styles.bannerBody}>
-              <Text style={styles.bannerTitle}>Lokal lang ang data mo.</Text>
-              <Text style={styles.bannerText}>Lokal lang ang data mo. Mag-sign in para ma-backup sa cloud.</Text>
+              <Text style={styles.bannerTitle}>Sa phone mo lang naka-save ang tala mo.</Text>
+              <Text style={styles.bannerText}>Mag-sign in para magkaroon ng online backup ang tindahan mo.</Text>
             </View>
             <View style={styles.bannerActions}>
               <Pressable onPress={() => void showLogin()} style={styles.bannerPrimaryAction}>
-                <Text style={styles.bannerPrimaryLabel}>Sign In</Text>
+                <Text style={styles.bannerPrimaryLabel}>Mag-sign in</Text>
               </Pressable>
               <Pressable onPress={() => setGuestBannerDismissed(true)} style={styles.bannerDismissAction}>
                 <Text style={styles.bannerDismissLabel}>Isara</Text>
@@ -532,7 +532,7 @@ export function DashboardScreen() {
         {showMicBanner ? (
           <View style={styles.warningBanner}>
             <View style={styles.bannerBody}>
-              <Text style={styles.bannerTitle}>Kailangan ng microphone access para sa voice input.</Text>
+              <Text style={styles.bannerTitle}>Kailangan ng access sa mikropono para gumana ang voice input.</Text>
               <Text style={styles.bannerText}>I-tap ang mic button para i-enable sa Settings.</Text>
             </View>
             <Pressable onPress={() => setMicBannerDismissed(true)} style={styles.bannerDismissAction}>
@@ -561,7 +561,7 @@ export function DashboardScreen() {
             <Ionicons color="#ffffff" name={isListening ? 'stop-outline' : 'mic-outline'} size={56} />
           </TouchableOpacity>
           <Text style={styles.voiceLabel}>{isListening ? 'NAKIKINIG...' : 'BOSES'}</Text>
-          <Text style={styles.voiceTitle}>Pindutin para ilista ang benta</Text>
+          <Text style={styles.voiceTitle}>Pindutin para magtala ng benta</Text>
           <Pressable onPress={() => setIsAddItemVisible(true)} style={styles.addItemButton}>
             <Ionicons color="#00604c" name="add-circle-outline" size={18} />
             <Text style={styles.addItemButtonLabel}>Magdagdag ng item</Text>
@@ -597,7 +597,7 @@ export function DashboardScreen() {
 
         {isSubmittingQuestion ? (
           <View style={styles.assistantCard}>
-            <Text style={styles.assistantTitle}>Sumasagot si Tindai...</Text>
+            <Text style={styles.assistantTitle}>Sumasagot si Tindai</Text>
             <ActivityIndicator color="#00604c" size="small" />
           </View>
         ) : null}
@@ -671,7 +671,7 @@ export function DashboardScreen() {
         ) : null}
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Buod Ngayon</Text>
+          <Text style={styles.sectionTitle}>Buod ngayong araw</Text>
         </View>
 
         <View style={styles.summaryRow}>
@@ -703,7 +703,7 @@ export function DashboardScreen() {
         ) : (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Kamakailang Tala</Text>
+              <Text style={styles.sectionTitle}>Mga huling tala</Text>
             </View>
             <View style={styles.activityCard}>
             {inventoryItems.slice(0, 8).map((item, index) => (
@@ -780,7 +780,7 @@ export function DashboardScreen() {
               onChangeText={setItemName}
             />
 
-            <Text style={styles.modalLabel}>Quantity</Text>
+            <Text style={styles.modalLabel}>Dami</Text>
             <TextInput
               keyboardType="number-pad"
               placeholder="0"
@@ -790,7 +790,7 @@ export function DashboardScreen() {
               onChangeText={setItemQuantity}
             />
 
-            <Text style={styles.modalLabel}>Cost price</Text>
+            <Text style={styles.modalLabel}>Puhunan kada item</Text>
             <TextInput
               keyboardType="decimal-pad"
               placeholder="0"
@@ -800,7 +800,7 @@ export function DashboardScreen() {
               onChangeText={setItemCost}
             />
 
-            <Text style={styles.modalLabel}>Selling price</Text>
+            <Text style={styles.modalLabel}>Presyo ng benta</Text>
             <TextInput
               keyboardType="decimal-pad"
               placeholder="0"

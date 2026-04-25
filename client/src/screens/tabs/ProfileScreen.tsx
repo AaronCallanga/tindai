@@ -23,7 +23,7 @@ function getDisplayEmail(profile: RemoteProfile | null) {
 }
 
 function getDisplayStore(storeName: string | undefined) {
-  return storeName?.trim() || 'My Store';
+  return storeName?.trim() || 'Aking Tindahan';
 }
 
 function getAvatarUrl(profile: RemoteProfile | null) {
@@ -145,8 +145,8 @@ export function ProfileScreen() {
   const avatarUrl = getAvatarUrl(profile);
   const avatarInitials = getInitials(displayName);
   const helperBody = isAuthenticated
-    ? 'Handa ang detalye ng tindahan mo sa phone na ito.'
-    : 'Mag-sign in para ma-backup ang tindahan mo online. Hindi mawawala ang data mo kahit offline.';
+    ? 'Naka-save sa phone na ito ang detalye ng tindahan mo.'
+    : 'Mag-sign in para may online backup ang tala ng tindahan mo. Mananatili pa rin ito sa phone mo kahit walang internet.';
 
   const handleStartEdit = () => {
     setFullNameInput(profile?.fullName?.trim() || '');
@@ -179,7 +179,7 @@ export function ProfileScreen() {
       accessToken = data.session?.access_token ?? null;
 
       if (!accessToken) {
-        throw new Error('Please log in again to continue.');
+        throw new Error('Mag-sign in ulit para magpatuloy.');
       }
 
       const nextProfile = await updateMyProfile(accessToken, {
@@ -193,7 +193,7 @@ export function ProfileScreen() {
       await refresh();
       setIsEditing(false);
     } catch (caughtError) {
-      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Unable to save profile right now.');
+      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Hindi ma-save ang profile ngayon. Subukan ulit.');
 
       if (didUpdateProfile) {
         try {
@@ -223,14 +223,14 @@ export function ProfileScreen() {
       const accessToken = data.session?.access_token;
 
       if (!accessToken) {
-        throw new Error('Please log in again to continue.');
+        throw new Error('Mag-sign in ulit para magpatuloy.');
       }
 
       const nextProfile = await clearMyProfileAvatar(accessToken);
       setProfile(nextProfile);
       setAvatarUrlInput('');
     } catch (caughtError) {
-      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Unable to remove avatar right now.');
+      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Hindi maalis ang larawan ngayon. Subukan ulit.');
     } finally {
       setIsRemovingAvatar(false);
     }
@@ -268,7 +268,7 @@ export function ProfileScreen() {
           <View style={styles.infoCard}>
             <View style={styles.infoChip}>
               <Text style={styles.infoChipIcon}>•</Text>
-              <Text style={styles.infoChipLabel}>Lokal ang data mo</Text>
+              <Text style={styles.infoChipLabel}>Nasa phone ang tala mo</Text>
             </View>
 
             <Text style={styles.infoBody}>{helperBody}</Text>
@@ -282,7 +282,7 @@ export function ProfileScreen() {
                   <TextInput
                     value={fullNameInput}
                     onChangeText={setFullNameInput}
-                    placeholder="May-ari ng Tindahan"
+                    placeholder="May-ari ng tindahan"
                     style={styles.fieldInput}
                     placeholderTextColor={colors.muted}
                   />
@@ -303,7 +303,7 @@ export function ProfileScreen() {
                   <TextInput
                     value={storeNameInput}
                     onChangeText={setStoreNameInput}
-                    placeholder="My Store"
+                    placeholder="Aking Tindahan"
                     style={styles.fieldInput}
                     placeholderTextColor={colors.muted}
                   />
@@ -313,10 +313,10 @@ export function ProfileScreen() {
 
                 <View style={styles.detailsCardActions}>
                   <Pressable style={styles.secondaryButton} onPress={handleCancelEdit}>
-                    <Text style={styles.secondaryButtonLabel}>Cancel</Text>
+                    <Text style={styles.secondaryButtonLabel}>Kanselahin</Text>
                   </Pressable>
                   <Pressable style={styles.primaryButton} onPress={() => void handleSaveProfile()} disabled={isSaving}>
-                    <Text style={styles.primaryButtonLabel}>{isSaving ? 'Saving...' : 'Save'}</Text>
+                    <Text style={styles.primaryButtonLabel}>{isSaving ? 'Sine-save...' : 'I-save'}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -339,16 +339,16 @@ export function ProfileScreen() {
                     disabled={isRemovingAvatar}
                   >
                     <Text style={styles.secondaryButtonLabel}>
-                      {isRemovingAvatar ? 'Removing...' : 'Remove avatar'}
+                      {isRemovingAvatar ? 'Inaalis...' : 'Alisin ang larawan'}
                     </Text>
                   </Pressable>
                 ) : (
                   <>
                     <Pressable style={styles.primaryButton} onPress={handleStartEdit}>
-                      <Text style={styles.primaryButtonLabel}>Edit profile</Text>
+                      <Text style={styles.primaryButtonLabel}>Ayusin ang profile</Text>
                     </Pressable>
                     <Pressable style={styles.secondaryButton} onPress={() => void signOut()}>
-                      <Text style={styles.secondaryButtonLabel}>Sign out</Text>
+                      <Text style={styles.secondaryButtonLabel}>Mag-sign out</Text>
                     </Pressable>
                   </>
                 )}

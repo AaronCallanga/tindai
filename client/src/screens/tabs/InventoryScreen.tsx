@@ -216,17 +216,17 @@ export function InventoryScreen() {
     }
 
     if (!Number.isInteger(quantity) || quantity < 0) {
-      setItemFormError('Ang quantity ay dapat zero o mas mataas.');
+      setItemFormError('Ang dami ay dapat zero o mas mataas.');
       return;
     }
 
     if (Number.isNaN(cost) || cost < 0) {
-      setItemFormError('Ang cost price ay dapat zero o mas mataas.');
+      setItemFormError('Ang puhunan ay dapat zero o mas mataas.');
       return;
     }
 
     if (Number.isNaN(price) || price < 0) {
-      setItemFormError('Ang selling price ay dapat zero o mas mataas.');
+      setItemFormError('Ang presyo ng benta ay dapat zero o mas mataas.');
       return;
     }
 
@@ -334,14 +334,14 @@ export function InventoryScreen() {
                 <Ionicons color={colors.primaryDeep} name="menu-outline" size={24} />
               </View>
 
-              <Text style={styles.headerTitle}>Inventory</Text>
+              <Text style={styles.headerTitle}>Imbentaryo</Text>
 
               <View style={styles.avatarBadge}>
                 <Text style={styles.avatarBadgeText}>{getInitials(store?.name ?? 'Tindai')}</Text>
               </View>
             </View>
 
-            <Text style={styles.headerSubtitle}>Hanapin, silipin, at ayusin agad ang paninda sa tindahan.</Text>
+            <Text style={styles.headerSubtitle}>Hanapin, silipin, at ayusin agad ang paninda mo.</Text>
 
             <View style={styles.searchRow}>
               <View style={styles.searchField}>
@@ -364,7 +364,7 @@ export function InventoryScreen() {
                 style={styles.filterButton}
               >
                 <Ionicons color={colors.primaryDeep} name="options-outline" size={18} />
-                <Text style={styles.filterButtonText}>Ayos</Text>
+                <Text style={styles.filterButtonText}>Salain</Text>
               </Pressable>
             </View>
 
@@ -381,7 +381,7 @@ export function InventoryScreen() {
                 </View>
                 {lowStockOnly ? (
                   <View style={styles.filterChip}>
-                    <Text style={styles.filterChipText}>Low stock only</Text>
+                    <Text style={styles.filterChipText}>Paubos lang</Text>
                   </View>
                 ) : null}
               </View>
@@ -395,7 +395,7 @@ export function InventoryScreen() {
 
             {showPendingPanel ? (
               <View style={styles.pendingCard}>
-                <Text style={styles.pendingTitle}>May naghihintay pa maipadala</Text>
+                <Text style={styles.pendingTitle}>May mga talang hindi pa naipapasa</Text>
                 {pendingTransactions.slice(0, 3).map((transaction, index) => (
                   <View
                     key={transaction.id}
@@ -468,10 +468,10 @@ export function InventoryScreen() {
                         <Text style={styles.itemMeta}>{getItemMetaLine(item)}</Text>
 
                         <View style={styles.itemStockRow}>
-                          <Text style={styles.itemStock}>{item.currentStock} in stock</Text>
+                          <Text style={styles.itemStock}>{item.currentStock} ang natitira</Text>
                           {isLowStock(item) ? (
                             <View style={styles.lowStockBadge}>
-                              <Text style={styles.lowStockBadgeText}>Low stock</Text>
+                              <Text style={styles.lowStockBadgeText}>Paubos na</Text>
                             </View>
                           ) : null}
                         </View>
@@ -522,12 +522,12 @@ export function InventoryScreen() {
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Ayusin ang listahan</Text>
 
-            <Text style={styles.sheetLabel}>Sort</Text>
+            <Text style={styles.sheetLabel}>Ayos ng listahan</Text>
             <View style={styles.optionStack}>
               {[
                 { key: 'name' as const, label: 'A-Z', testID: 'inventory-sort-name' },
-                { key: 'stock_desc' as const, label: 'Stock high to low', testID: 'inventory-sort-stock-desc' },
-                { key: 'stock_asc' as const, label: 'Stock low to high', testID: 'inventory-sort-stock-asc' },
+                { key: 'stock_desc' as const, label: 'Pinakamarami muna', testID: 'inventory-sort-stock-desc' },
+                { key: 'stock_asc' as const, label: 'Pinakakaunti muna', testID: 'inventory-sort-stock-asc' },
               ].map((option) => {
                 const isActive = sortMode === option.key;
 
@@ -545,7 +545,7 @@ export function InventoryScreen() {
               })}
             </View>
 
-            <Text style={styles.sheetLabel}>Filter</Text>
+            <Text style={styles.sheetLabel}>Salain</Text>
             <Pressable
               testID="inventory-low-stock-toggle"
               accessibilityRole="button"
@@ -553,8 +553,8 @@ export function InventoryScreen() {
               style={[styles.toggleRow, lowStockOnly ? styles.toggleRowActive : undefined]}
             >
               <View>
-                <Text style={styles.toggleTitle}>Low stock only</Text>
-                <Text style={styles.toggleBody}>Ipakita lang ang kailangan bantayan.</Text>
+                <Text style={styles.toggleTitle}>Paubos lang</Text>
+                <Text style={styles.toggleBody}>Ipakita lang ang mga item na kailangang bantayan.</Text>
               </View>
               <View style={[styles.togglePill, lowStockOnly ? styles.togglePillActive : undefined]}>
                 <View style={[styles.toggleKnob, lowStockOnly ? styles.toggleKnobActive : undefined]} />
@@ -586,7 +586,7 @@ export function InventoryScreen() {
               value={itemName}
             />
 
-            <Text style={styles.sheetLabel}>Quantity</Text>
+            <Text style={styles.sheetLabel}>Dami</Text>
             <TextInput
               testID="inventory-add-quantity-input"
               keyboardType="number-pad"
@@ -597,7 +597,7 @@ export function InventoryScreen() {
               value={itemQuantity}
             />
 
-            <Text style={styles.sheetLabel}>Cost price</Text>
+            <Text style={styles.sheetLabel}>Puhunan kada item</Text>
             <TextInput
               testID="inventory-add-cost-input"
               keyboardType="decimal-pad"
@@ -608,7 +608,7 @@ export function InventoryScreen() {
               value={itemCost}
             />
 
-            <Text style={styles.sheetLabel}>Selling price</Text>
+            <Text style={styles.sheetLabel}>Presyo ng benta</Text>
             <TextInput
               testID="inventory-add-price-input"
               keyboardType="decimal-pad"
@@ -630,7 +630,7 @@ export function InventoryScreen() {
                 onPress={() => void handleAddItem()}
                 style={styles.primaryAction}
               >
-                <Text style={styles.primaryActionText}>{isSavingItem ? 'Nagse-save...' : 'I-save ang item'}</Text>
+                <Text style={styles.primaryActionText}>{isSavingItem ? 'Sine-save...' : 'I-save ang item'}</Text>
               </Pressable>
             </View>
           </View>
@@ -658,7 +658,7 @@ export function InventoryScreen() {
               value={editItemName}
             />
 
-            <Text style={styles.sheetLabel}>Cost price</Text>
+            <Text style={styles.sheetLabel}>Puhunan kada item</Text>
             <TextInput
               testID="inventory-edit-cost-input"
               keyboardType="decimal-pad"
@@ -669,7 +669,7 @@ export function InventoryScreen() {
               value={editItemCost}
             />
 
-            <Text style={styles.sheetLabel}>Selling price</Text>
+            <Text style={styles.sheetLabel}>Presyo ng benta</Text>
             <TextInput
               testID="inventory-edit-price-input"
               keyboardType="decimal-pad"
@@ -680,7 +680,7 @@ export function InventoryScreen() {
               value={editItemPrice}
             />
 
-            <Text style={styles.sheetLabel}>Low stock alert</Text>
+            <Text style={styles.sheetLabel}>Babala kapag paubos na</Text>
             <TextInput
               testID="inventory-edit-threshold-input"
               keyboardType="number-pad"
@@ -717,21 +717,21 @@ export function InventoryScreen() {
             {selectedItem ? (
               <View style={styles.detailStack}>
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Aliases</Text>
+                  <Text style={styles.detailLabel}>Ibang tawag</Text>
                   <Text style={styles.detailValue}>{selectedItem.aliases.join(', ') || 'Wala pa'}</Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Stock</Text>
+                  <Text style={styles.detailLabel}>Natitirang dami</Text>
                   <Text style={styles.detailValue}>
                     {selectedItem.currentStock} {selectedItem.unit}
                   </Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Price</Text>
+                  <Text style={styles.detailLabel}>Presyo ng benta</Text>
                   <Text style={styles.detailValue}>{formatMoney(selectedItem.price)}</Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Cost</Text>
+                  <Text style={styles.detailLabel}>Puhunan</Text>
                   <Text style={styles.detailValue}>
                     {selectedItem.cost === null ? 'Wala pa' : formatMoney(selectedItem.cost)}
                   </Text>
@@ -745,14 +745,14 @@ export function InventoryScreen() {
 
             <View style={styles.sheetActions}>
               <Pressable testID="inventory-edit-open-button" onPress={handleOpenEditItem} style={styles.secondaryAction}>
-                <Text style={styles.secondaryActionText}>I-edit</Text>
+                <Text style={styles.secondaryActionText}>Ayusin</Text>
               </Pressable>
               <Pressable
                 testID="inventory-archive-button"
                 onPress={() => void handleArchiveItem()}
                 style={styles.dangerAction}
               >
-                <Text style={styles.dangerActionText}>{isArchivingItem ? 'Ina-archive...' : 'I-archive'}</Text>
+                <Text style={styles.dangerActionText}>{isArchivingItem ? 'Ina-archive...' : 'Itabi ang item'}</Text>
               </Pressable>
               <Pressable onPress={() => setSelectedItem(null)} style={styles.secondaryAction}>
                 <Text style={styles.secondaryActionText}>Isara</Text>

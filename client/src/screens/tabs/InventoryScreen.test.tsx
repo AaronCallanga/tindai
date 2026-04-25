@@ -219,7 +219,7 @@ describe('InventoryScreen', () => {
   it('renders the inventory list from local data with pending sync panel', async () => {
     const tree = await renderInventoryScreen();
 
-    expect(findTextNodes(tree, 'Inventory')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Imbentaryo')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Bawas 2 Coke')).not.toHaveLength(0);
     expect(getRenderedItemNames(tree)).toEqual(['Lucky 7 Sardines', 'Pancit Canton', 'Softdrink Mismo']);
   });

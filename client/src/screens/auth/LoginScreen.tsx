@@ -56,14 +56,14 @@ export function LoginScreen() {
 
   return (
     <AuthLayout
-      badge="Account backup"
-      title="Ikonekta ang account mo."
-      subtitle="I-save ang iyong imbentaryo at i-sync sa cloud para sa ligtas na backup."
+      badge="Backup ng account"
+      title="Mag-sign in sa account mo."
+      subtitle="I-save ang imbentaryo mo online para may backup ka kapag nawala ang internet o nagpalit ka ng phone."
       submitLabel="Magpatuloy"
-      alternateLabel="Wala ka pang account? Gumawa dito."
+      alternateLabel="Wala ka pang account? Gumawa ka rito."
       onSubmit={handleEmailSignIn}
       onAlternatePress={() => void showSignUp()}
-      dismissLabel="Back to app"
+      dismissLabel="Bumalik sa app"
       onDismiss={() => void closeAuth()}
     >
       <View style={styles.formBlock}>
@@ -82,7 +82,7 @@ export function LoginScreen() {
         />
         <AuthField
           label="Password"
-          placeholder="Enter your password"
+          placeholder="Ilagay ang password mo"
           value={password}
           onChangeText={(value) => {
             setPassword(value);
@@ -97,7 +97,7 @@ export function LoginScreen() {
 
       <View style={styles.divider}>
         <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>or</Text>
+        <Text style={styles.dividerText}>o</Text>
         <View style={styles.dividerLine} />
       </View>
 

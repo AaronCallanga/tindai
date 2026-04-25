@@ -173,8 +173,8 @@ describe('DashboardScreen', () => {
     const tree = await renderDashboardScreen();
 
     expect(findTextNodes(tree, 'Tindai')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Pindutin para ilista ang benta')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Buod Ngayon')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Pindutin para magtala ng benta')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Buod ngayong araw')).not.toHaveLength(0);
   });
 
   it('shows guest backup messaging and the add-item action', async () => {
@@ -183,15 +183,15 @@ describe('DashboardScreen', () => {
 
     const tree = await renderDashboardScreen();
 
-    expect(findTextNodes(tree, 'Lokal lang ang data mo. Mag-sign in para ma-backup sa cloud.')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Sign In')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Mag-sign in para magkaroon ng online backup ang tindahan mo.')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Mag-sign in')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Magdagdag ng item')).not.toHaveLength(0);
   });
 
   it('keeps the inventory controls visible in the migrated layout', async () => {
     const tree = await renderDashboardScreen();
 
-    expect(findTextNodes(tree, 'Kamakailang Tala')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Mga huling tala')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Coke Mismo')).not.toHaveLength(0);
     expect(findIconNodes(tree, 'remove')).not.toHaveLength(0);
     expect(findIconNodes(tree, 'add')).not.toHaveLength(0);

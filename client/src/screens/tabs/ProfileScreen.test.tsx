@@ -175,25 +175,25 @@ describe('ProfileScreen', () => {
     const tree = await renderProfileScreen();
 
     expect(findTextNodes(tree, 'Profile')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Lokal ang data mo')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Nasa phone ang tala mo')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Ana Mercado')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'ana@example.com')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Mercado Store')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'AM')).not.toHaveLength(0);
-    expect(findPressable(tree, 'Edit profile')).toBeDefined();
+    expect(findPressable(tree, 'Ayusin ang profile')).toBeDefined();
   });
 
   it('enters edit mode with current values prefilled', async () => {
     const tree = await renderProfileScreen();
 
     await act(async () => {
-      findPressable(tree, 'Edit profile').props.onPress();
+      findPressable(tree, 'Ayusin ang profile').props.onPress();
     });
 
     expect(findTextInputByValue(tree, 'Ana Mercado')).toBeDefined();
     expect(findTextInputByValue(tree, 'ana@example.com')).toBeDefined();
     expect(findTextInputByValue(tree, 'Mercado Store')).toBeDefined();
-    expect(findPressable(tree, 'Save')).toBeDefined();
+    expect(findPressable(tree, 'I-save')).toBeDefined();
   });
 
   it('saves profile and store changes then exits edit mode', async () => {
@@ -215,7 +215,7 @@ describe('ProfileScreen', () => {
     });
 
     await act(async () => {
-      findPressable(tree, 'Edit profile').props.onPress();
+      findPressable(tree, 'Ayusin ang profile').props.onPress();
     });
 
     await act(async () => {
@@ -224,7 +224,7 @@ describe('ProfileScreen', () => {
     });
 
     await act(async () => {
-      await findPressable(tree, 'Save').props.onPress();
+      await findPressable(tree, 'I-save').props.onPress();
     });
 
     expect(mockedUpdateMyProfile).toHaveBeenCalledWith('session-token', {
@@ -233,8 +233,8 @@ describe('ProfileScreen', () => {
     });
     expect(mockedUpdateMyStoreName).toHaveBeenCalledWith('session-token', 'Ana Store');
     expect(mockedRefresh).toHaveBeenCalledTimes(1);
-    expect(findTextNodes(tree, 'Save')).toHaveLength(0);
-    expect(findPressable(tree, 'Edit profile')).toBeDefined();
+    expect(findTextNodes(tree, 'I-save')).toHaveLength(0);
+    expect(findPressable(tree, 'Ayusin ang profile')).toBeDefined();
     expect(findImages(tree)).toHaveLength(1);
   });
 
@@ -249,11 +249,11 @@ describe('ProfileScreen', () => {
     const tree = await renderProfileScreen();
 
     await act(async () => {
-      findPressable(tree, 'Edit profile').props.onPress();
+      findPressable(tree, 'Ayusin ang profile').props.onPress();
     });
 
     await act(async () => {
-      await findPressable(tree, 'Remove avatar').props.onPress();
+      await findPressable(tree, 'Alisin ang larawan').props.onPress();
     });
 
     expect(mockedClearMyProfileAvatar).toHaveBeenCalledWith('session-token');
@@ -267,15 +267,15 @@ describe('ProfileScreen', () => {
     const tree = await renderProfileScreen();
 
     await act(async () => {
-      findPressable(tree, 'Edit profile').props.onPress();
+      findPressable(tree, 'Ayusin ang profile').props.onPress();
     });
 
     await act(async () => {
-      await findPressable(tree, 'Save').props.onPress();
+      await findPressable(tree, 'I-save').props.onPress();
     });
 
     expect(findTextNodes(tree, 'Store update failed.')).not.toHaveLength(0);
-    expect(findPressable(tree, 'Save')).toBeDefined();
+    expect(findPressable(tree, 'I-save')).toBeDefined();
   });
 
   it('renders auth actions when signed out', async () => {
@@ -287,6 +287,6 @@ describe('ProfileScreen', () => {
     expect(findTextNodes(tree, 'Gumawa ng Account')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Mag-log In')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Walang email')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Edit profile')).toHaveLength(0);
+    expect(findTextNodes(tree, 'Ayusin ang profile')).toHaveLength(0);
   });
 });
