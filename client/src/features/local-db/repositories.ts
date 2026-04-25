@@ -362,7 +362,7 @@ export class InventoryRepository {
 
     for (const item of items) {
       await this.database.runAsync(
-      `insert into inventory_items (
+        `insert into inventory_items (
           id,
           store_id,
           name,
@@ -373,7 +373,7 @@ export class InventoryRepository {
           current_stock,
           low_stock_threshold,
           updated_at
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.id,
           item.storeId,

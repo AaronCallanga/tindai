@@ -80,9 +80,9 @@ export function SignUpScreen() {
       submitLabel="Create account"
       alternateLabel="Already have an account? Sign in"
       onSubmit={handleEmailSignUp}
-      onAlternatePress={showLogin}
+      onAlternatePress={() => void showLogin()}
       dismissLabel="Back to app"
-      onDismiss={closeAuth}
+      onDismiss={() => void closeAuth()}
     >
       <View style={styles.formBlock}>
         <AuthField

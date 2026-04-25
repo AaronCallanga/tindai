@@ -39,15 +39,11 @@ type AuthContextValue = {
   microphonePermission: PermissionStatus;
   storagePermission: PermissionStatus;
   onboardingCompleted: boolean;
-  hasCompletedOnboarding: boolean;
-  onboardingStep: 1 | 2 | 3;
   tutorialShown: boolean;
   isGoogleSignInEnabled: boolean;
   googleSignInHint: string | null;
   chooseGuestMode: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
-  nextOnboardingStep: () => Promise<void>;
-  skipOnboarding: () => Promise<void>;
   showLogin: () => Promise<void>;
   showSignUp: () => Promise<void>;
   closeAuth: () => Promise<void>;
@@ -184,7 +180,6 @@ function buildHydratedState(params: {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appFlowReducer, initialAppFlowState);
-  const [onboardingStep, setOnboardingStep] = useState<1 | 2 | 3>(1);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const googleAvailability = useMemo(getGoogleSignInAvailability, []);
@@ -297,8 +292,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       microphonePermission: state.permissions.microphone,
       storagePermission: state.permissions.storage,
       onboardingCompleted: state.onboardingCompleted,
-      hasCompletedOnboarding: state.onboardingCompleted,
-      onboardingStep,
       tutorialShown: state.tutorialShown,
       isGoogleSignInEnabled: googleAvailability.enabled,
       googleSignInHint: googleAvailability.hint,
@@ -311,25 +304,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       completeOnboarding: async () => {
         dispatch({ type: 'completeOnboarding' });
-        setOnboardingStep(3);
-        await persistState({
-          onboardingCompleted: true,
-        });
-      },
-      nextOnboardingStep: async () => {
-        if (onboardingStep < 3) {
-          setOnboardingStep((current) => (current < 3 ? ((current + 1) as 1 | 2 | 3) : current));
-          return;
-        }
-
-        dispatch({ type: 'completeOnboarding' });
-        await persistState({
-          onboardingCompleted: true,
-        });
-      },
-      skipOnboarding: async () => {
-        dispatch({ type: 'completeOnboarding' });
-        setOnboardingStep(3);
         await persistState({
           onboardingCompleted: true,
         });
@@ -574,7 +548,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await Linking.openSettings();
       },
     }),
-    [authError, googleAvailability, isAuthLoading, onboardingStep, state],
+    [authError, googleAvailability, isAuthLoading, state],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
