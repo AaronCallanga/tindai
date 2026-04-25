@@ -1,30 +1,21 @@
-import Image from 'next/image';
+import Link from 'next/link';
+
+import { SiteHeader } from '@/components/SiteHeader';
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-white text-slate-900">
       <div className="mx-auto max-w-7xl px-5 lg:px-12">
-        <header className="py-4">
-          <div className="flex items-center gap-2 text-base font-bold text-emerald-900">
-            <Image
-              src="/logo.png"
-              alt="Tindai"
-              width={28}
-              height={28}
-              className="h-7 w-auto object-contain"
-              priority
-            />
-            Tindai
-          </div>
-        </header>
+        <SiteHeader />
 
         <section className="grid min-h-[calc(100vh-72px)] items-center gap-10 py-6 md:grid-cols-2 md:py-10">
-          <div className="mx-auto w-full max-w-xl md:mx-0">
+          <div className="mx-auto w-full max-w-none md:mx-0 md:max-w-3xl">
             <p className="inline-block rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
               Para sa sari-sari store
             </p>
-            <h1 className="mt-4 text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
-              Para sa MSME na walang oras sa komplikado - simple, mabilis, at pang-negosyo.
+            <h1 className="mt-4 hyphens-none text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
+              Para sa busy na MSME na ayaw ng komplikado: simple, mabilis, at{' '}
+              <span className="whitespace-nowrap">pang-negosyo.</span>
             </h1>
             <p className="mt-4 text-base leading-7 text-slate-700">
               Bawas hula sa iyong negosyo, kita mo agad ang kulang at mabenta kahit walang internet.
@@ -37,17 +28,17 @@ export default function Home() {
               >
                 Subukan nang Libre
               </a>
-              <a
-                href="#"
+              <Link
+                href="/paano-gamitin"
                 className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
               >
-                Pano Gumagana (1 min)
-              </a>
+                Paano Gamitin
+              </Link>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-              <span>Libre simulan</span>
-              <span>Walang credit card</span>
+              <span>Libreng simulan</span>
+              <span>Walang kailangan na credit card</span>
               <span>Android-friendly</span>
             </div>
 
@@ -58,7 +49,7 @@ export default function Home() {
                 <span className="h-7 w-7 rounded-full border-2 border-white bg-slate-500" />
               </div>
               <p className="text-xs leading-5 text-slate-600">
-                <span className="font-semibold text-emerald-700">10,000+</span> tindera na ang gumagamit.
+                <span className="font-semibold text-emerald-700">10,000+</span> na tindera na ang gumagamit.
               </p>
             </div>
           </div>
