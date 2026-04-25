@@ -224,16 +224,16 @@ export function InventoryScreen() {
     <>
       <ClientTabLayout
         label="Paninda"
-        title="Dito mo mababantayan ang paninda."
-        subtitle="Makikita mo rito ang bilang, malapit maubos, at mga naghihintay maipadala."
+        title="Hanapin, silipin, at ayusin agad ang paninda mo."
+        subtitle="Makikita mo rito ang bilang, mga paubos na, at mga naghihintay maipadala."
         highlights={[
           `${inventoryItems.length} produktong naka-lista`,
           showPending
             ? pendingTransactions.length > 0
               ? `${pendingTransactions.length} tala ang naghihintay ng internet`
               : 'Lahat ng tala ay naipadala na'
-            : 'Mag-login para maipadala ang mga tala kapag may internet',
-          'Pwede ka ring maghanda ng litrato ng resibo bago ito iproseso',
+            : 'Mag-sign in para magkaroon ng online backup ang mga tala mo',
+          'Puwede ka ring maghanda ng litrato ng resibo bago ito iproseso',
         ]}
       >
         <View style={styles.receiptCard}>
