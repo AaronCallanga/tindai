@@ -12,6 +12,7 @@ import {
   type ReceiptImageDraft,
 } from '@/features/receipt-scan/receiptCapture';
 import {
+  confirmReceiptOnBackend,
   matchReceiptOnBackend,
   parseReceiptOnBackend,
   sendReceiptOcrToBackend,
@@ -38,8 +39,80 @@ function formatPendingLine(createdAt: string, source: string, intent: string | n
   return `${time} - ${kind} - ${from}`;
 }
 
+function parseReceiptPositiveNumber(value: string) {
+  const normalized = value.replace(/,/g, '').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function buildReceiptConfirmPayload(review: ReceiptReviewSession) {
+  return {
+    items: review.items.map((item) => {
+      if (item.resolution === 'SKIP') {
+        return {
+          receiptItemId: item.receiptItemId,
+          action: 'SKIP' as const,
+          rawName: item.rawName,
+          displayName: item.displayName,
+        };
+      }
+
+      const quantity = parseReceiptPositiveNumber(item.quantityText);
+      if (quantity === null) {
+        throw new Error(`Ayusin muna ang dami para sa ${item.displayName || item.rawName}.`);
+      }
+
+      const explicitUnitCost = parseReceiptPositiveNumber(item.unitPriceText);
+      const lineTotal = parseReceiptPositiveNumber(item.lineTotalText);
+      const derivedUnitCost =
+        explicitUnitCost ?? (lineTotal !== null && quantity > 0 ? Number((lineTotal / quantity).toFixed(2)) : null);
+
+      if (item.resolution === 'MATCH_EXISTING') {
+        if (!item.selectedProductId) {
+          throw new Error(`Pumili muna ng paninda para sa ${item.displayName || item.rawName}.`);
+        }
+
+        return {
+          receiptItemId: item.receiptItemId,
+          action: 'MATCH_EXISTING' as const,
+          productId: item.selectedProductId,
+          quantity,
+          unitCost: derivedUnitCost,
+          rawName: item.rawName,
+          displayName: item.displayName,
+          matchedAlias: item.matchedAlias,
+        };
+      }
+
+      const createProductName = item.newProductName.trim() || item.displayName.trim() || item.rawName.trim();
+      if (!createProductName) {
+        throw new Error(`Pangalanan muna ang bagong paninda para sa ${item.rawName}.`);
+      }
+
+      return {
+        receiptItemId: item.receiptItemId,
+        action: 'CREATE_PRODUCT' as const,
+        createProductName,
+        quantity,
+        unitCost: derivedUnitCost,
+        rawName: item.rawName,
+        displayName: item.displayName,
+        matchedAlias: item.matchedAlias,
+      };
+    }),
+  };
+}
+
 export function InventoryScreen() {
-  const { appState, inventoryItems, pendingTransactions } = useLocalData();
+  const { appState, inventoryItems, pendingTransactions, refresh } = useLocalData();
   const [isReceiptFlowVisible, setIsReceiptFlowVisible] = useState(false);
   const [savedReceiptDraft, setSavedReceiptDraft] = useState<ReceiptImageDraft | null>(null);
   const [receiptProcessingState, setReceiptProcessingState] = useState<ReceiptProcessingState>({ status: 'idle' });
@@ -81,6 +154,61 @@ export function InventoryScreen() {
       isMatchPickerOpen: open ? false : item.isMatchPickerOpen,
       resolution: open ? 'UNRESOLVED' : item.resolution,
     }));
+  }
+
+  async function handleConfirmReceiptReview() {
+    if (!receiptReview) {
+      return;
+    }
+
+    try {
+      const lastExtraction =
+        receiptProcessingState.status === 'succeeded'
+          ? receiptProcessingState.extraction
+          : receiptProcessingState.status === 'weak_text'
+            ? receiptProcessingState.extraction
+            : {
+                provider: 'ml_kit' as const,
+                rawText: '',
+                ocrBlocks: [],
+                imageMeta: { width: 0, height: 0, fileSize: 0 },
+              };
+      const { data } = await supabase.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (!accessToken) {
+        throw new Error('Mag-sign in muna bago isave ang resibo.');
+      }
+
+      const payload = buildReceiptConfirmPayload(receiptReview);
+      setReceiptProcessingState({
+        status: 'confirming_receipt',
+        receiptId: receiptReview.receiptId,
+      });
+
+      const result = await confirmReceiptOnBackend({
+        accessToken,
+        receiptId: receiptReview.receiptId,
+        idempotencyKey: `receipt-confirm-${receiptReview.receiptId}`,
+        payload,
+      });
+
+      await refresh();
+      setReceiptReview(null);
+      setSavedReceiptDraft(null);
+      setReceiptProcessingState({
+        status: 'succeeded',
+        receiptId: receiptReview.receiptId,
+        extraction: lastExtraction,
+        reviewStatus: 'ready_for_parse',
+        message: `Naisave ang resibo. Nadagdag ang ${result.appliedItems} item, nilaktawan ang ${result.skippedItems}, at may ${result.aliasesSaved} bagong tawag na natandaan.`,
+      });
+    } catch (error) {
+      setReceiptProcessingState({
+        status: 'failed',
+        receiptId: receiptReview.receiptId,
+        message: error instanceof Error ? error.message : 'Hindi pa naisave ang resibo.',
+      });
+    }
   }
 
   async function handleSaveReceiptDraft(draft: ReceiptImageDraft) {
@@ -276,7 +404,8 @@ export function InventoryScreen() {
           {receiptProcessingState.status === 'running_ocr' ||
           receiptProcessingState.status === 'uploading_ocr' ||
           receiptProcessingState.status === 'parsing_receipt' ||
-          receiptProcessingState.status === 'matching_items' ? (
+          receiptProcessingState.status === 'matching_items' ||
+          receiptProcessingState.status === 'confirming_receipt' ? (
             <View style={styles.processingCard}>
               <Text style={styles.processingTitle}>
                 {receiptProcessingState.status === 'running_ocr'
@@ -285,7 +414,9 @@ export function InventoryScreen() {
                     ? 'Ipinapadala ang nabasang laman'
                     : receiptProcessingState.status === 'parsing_receipt'
                       ? 'Hinahanap ang mga item'
-                      : 'Inuugnay sa listahan ng paninda'}
+                      : receiptProcessingState.status === 'matching_items'
+                        ? 'Inuugnay sa listahan ng paninda'
+                        : 'Sine-save ang resibo'}
               </Text>
               <Text style={styles.processingBody}>Sandali lang habang inihahanda ang susunod na hakbang.</Text>
             </View>
@@ -329,8 +460,18 @@ export function InventoryScreen() {
           <View style={styles.reviewReadyCard}>
             <Text style={styles.reviewReadyTitle}>Handa na ang listahan ng item</Text>
             <Text style={styles.processingBody}>
-              Napili na ang gagawing paninda, bagong item, o mga hindi isasama. Ang susunod na hakbang ay pag-save ng napiling listahan.
+              Napili na ang gagawing paninda, bagong item, o mga hindi isasama. Puwede mo nang isave ang napiling listahan.
             </Text>
+            <Pressable
+              testID="receipt-confirm-button"
+              onPress={() => {
+                void handleConfirmReceiptReview();
+              }}
+              style={styles.receiptButton}
+            >
+              <Ionicons color="#ffffff" name="checkmark-circle-outline" size={18} />
+              <Text style={styles.receiptButtonLabel}>I-save ang resibo</Text>
+            </Pressable>
           </View>
         ) : null}
 

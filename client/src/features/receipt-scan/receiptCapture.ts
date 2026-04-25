@@ -1,5 +1,4 @@
 import { Image } from 'react-native';
-import RNFS from 'react-native-fs';
 import ImageResizer from 'react-native-image-resizer';
 import {
   assessReceiptImageQuality,
@@ -38,9 +37,32 @@ export type ReceiptImageDraft = {
   qualityIssues: ReceiptQualityIssue[];
 };
 
-const RECEIPT_TMP_DIR = `${RNFS.CachesDirectoryPath}/receipt-scans`;
 const RECEIPT_MAX_DIMENSION = 1600;
 const RECEIPT_JPEG_QUALITY = 82;
+const RECEIPT_TMP_SUBDIR = 'receipt-scans';
+
+function getExpoFileSystemLegacy() {
+  try {
+    // `expo-file-system/legacy` ships with Expo SDK and provides stable async file helpers.
+    return require('expo-file-system/legacy') as {
+      cacheDirectory?: string;
+      getInfoAsync: (path: string) => Promise<{ exists: boolean }>;
+      makeDirectoryAsync: (path: string, options?: { intermediates?: boolean }) => Promise<void>;
+      deleteAsync: (path: string, options?: { idempotent?: boolean }) => Promise<void>;
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getReceiptTempDirectoryPath() {
+  const fileSystem = getExpoFileSystemLegacy();
+  if (fileSystem?.cacheDirectory) {
+    return `${fileSystem.cacheDirectory}${RECEIPT_TMP_SUBDIR}`;
+  }
+
+  return null;
+}
 
 function buildReceiptDraftId() {
   return `receipt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -73,12 +95,25 @@ export function ensureFileUri(pathOrUri: string) {
 }
 
 export function getReceiptTempPath(extension = 'jpg') {
-  return `${RECEIPT_TMP_DIR}/receipt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+  const tempDir = getReceiptTempDirectoryPath();
+  const fileName = `receipt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+
+  if (!tempDir) {
+    return fileName;
+  }
+
+  return `${tempDir}/${fileName}`;
 }
 
 export async function ensureReceiptTempDirectory() {
-  await RNFS.mkdir(RECEIPT_TMP_DIR);
-  return RECEIPT_TMP_DIR;
+  const fileSystem = getExpoFileSystemLegacy();
+  const tempDir = getReceiptTempDirectoryPath();
+  if (!fileSystem || !tempDir) {
+    return null;
+  }
+
+  await fileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
+  return tempDir;
 }
 
 async function getImageDimensions(uri: string) {
@@ -92,7 +127,7 @@ async function getImageDimensions(uri: string) {
 }
 
 export async function prepareReceiptImageDraft(input: ReceiptImageInput): Promise<ReceiptImageDraft> {
-  await ensureReceiptTempDirectory();
+  const receiptTempDir = await ensureReceiptTempDirectory();
 
   let compressed: Awaited<ReturnType<typeof ImageResizer.createResizedImage>>;
   try {
@@ -104,7 +139,7 @@ export async function prepareReceiptImageDraft(input: ReceiptImageInput): Promis
       'JPEG',
       RECEIPT_JPEG_QUALITY,
       0,
-      RECEIPT_TMP_DIR,
+      receiptTempDir ?? undefined,
       false,
       {
         mode: 'contain',
@@ -123,10 +158,12 @@ export async function prepareReceiptImageDraft(input: ReceiptImageInput): Promis
 
   const tempPath = compressed.path;
   const tempUri = ensureFileUri(compressed.uri || compressed.path);
-  const fileExists = await RNFS.exists(tempPath);
-
-  if (!fileExists) {
-    throw new Error('Hindi makita ang naihandang image file ng resibo.');
+  const fileSystem = getExpoFileSystemLegacy();
+  if (fileSystem) {
+    const fileInfo = await fileSystem.getInfoAsync(tempPath);
+    if (!fileInfo.exists) {
+      throw new Error('Hindi makita ang naihandang image file ng resibo.');
+    }
   }
 
   const dimensions =
@@ -162,8 +199,13 @@ export async function cleanupReceiptImageDraft(draft: ReceiptImageDraft | null |
     return;
   }
 
-  const exists = await RNFS.exists(draft.tempPath);
-  if (exists) {
-    await RNFS.unlink(draft.tempPath);
+  const fileSystem = getExpoFileSystemLegacy();
+  if (!fileSystem) {
+    return;
+  }
+
+  const exists = await fileSystem.getInfoAsync(draft.tempPath);
+  if (exists.exists) {
+    await fileSystem.deleteAsync(draft.tempPath, { idempotent: true });
   }
 }

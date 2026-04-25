@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { app } from '../app';
 import { getSupabaseAdminClient } from '../config/supabase';
+import { confirmReceiptForOwner } from '../models/receipts.model';
 import { matchReceiptForOwner } from '../models/receipts.model';
 import { parseReceiptForOwner } from '../models/receipts.model';
 import { processReceiptOcrForOwner } from '../models/receipts.model';
@@ -15,12 +16,14 @@ vi.mock('../models/receipts.model', async () => {
   const actual = await vi.importActual<typeof import('../models/receipts.model')>('../models/receipts.model');
   return {
     ...actual,
+    confirmReceiptForOwner: vi.fn(),
     matchReceiptForOwner: vi.fn(),
     parseReceiptForOwner: vi.fn(),
     processReceiptOcrForOwner: vi.fn(),
   };
 });
 
+const mockedConfirmReceiptForOwner = vi.mocked(confirmReceiptForOwner);
 const mockedGetSupabaseAdminClient = vi.mocked(getSupabaseAdminClient);
 const mockedMatchReceiptForOwner = vi.mocked(matchReceiptForOwner);
 const mockedParseReceiptForOwner = vi.mocked(parseReceiptForOwner);
@@ -259,6 +262,108 @@ describe('POST /api/v1/receipts/:receiptId/match', () => {
 
     expect(response.body).toEqual({
       message: 'Invalid receipt match payload.',
+    });
+  });
+});
+
+describe('POST /api/v1/receipts/:receiptId/confirm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('confirms reviewed receipt items for authenticated users', async () => {
+    mockAuthenticatedUser();
+    mockedConfirmReceiptForOwner.mockResolvedValue({
+      receiptId: 'receipt-123',
+      status: 'COMMITTED',
+      transactionId: 'txn-123',
+      appliedItems: 1,
+      skippedItems: 1,
+      aliasesSaved: 1,
+      createdItems: 0,
+    });
+
+    const response = await request(app)
+      .post('/api/v1/receipts/receipt-123/confirm')
+      .set('Authorization', 'Bearer valid-token')
+      .set('Idempotency-Key', 'receipt-confirm-123')
+      .send({
+        items: [
+          {
+            receiptItemId: 'receipt-123-item-1',
+            action: 'MATCH_EXISTING',
+            productId: 'item-1',
+            quantity: 2,
+            unitCost: 65,
+            rawName: 'COKE 1.5L',
+            displayName: 'Coca-Cola 1.5 Liter',
+            matchedAlias: 'coke 1.5l',
+          },
+          {
+            receiptItemId: 'receipt-123-item-2',
+            action: 'SKIP',
+            rawName: 'PLASTIC BAG',
+            displayName: 'Plastic Bag',
+          },
+        ],
+      })
+      .expect(200);
+
+    expect(mockedConfirmReceiptForOwner).toHaveBeenCalledWith(
+      'user-123',
+      'receipt-123',
+      'receipt-confirm-123',
+      {
+        items: [
+          {
+            receiptItemId: 'receipt-123-item-1',
+            action: 'MATCH_EXISTING',
+            productId: 'item-1',
+            quantity: 2,
+            unitCost: 65,
+            rawName: 'COKE 1.5L',
+            displayName: 'Coca-Cola 1.5 Liter',
+            matchedAlias: 'coke 1.5l',
+          },
+          {
+            receiptItemId: 'receipt-123-item-2',
+            action: 'SKIP',
+            rawName: 'PLASTIC BAG',
+            displayName: 'Plastic Bag',
+          },
+        ],
+      },
+    );
+    expect(response.body).toEqual({
+      receiptId: 'receipt-123',
+      status: 'COMMITTED',
+      transactionId: 'txn-123',
+      appliedItems: 1,
+      skippedItems: 1,
+      aliasesSaved: 1,
+      createdItems: 0,
+    });
+  });
+
+  it('returns 400 for invalid confirm payloads', async () => {
+    mockAuthenticatedUser();
+
+    const response = await request(app)
+      .post('/api/v1/receipts/receipt-123/confirm')
+      .set('Authorization', 'Bearer valid-token')
+      .set('Idempotency-Key', 'receipt-confirm-123')
+      .send({
+        items: [
+          {
+            receiptItemId: 'receipt-123-item-1',
+            action: 'MATCH_EXISTING',
+          },
+        ],
+      })
+      .expect(400);
+
+    expect(response.body).toEqual({
+      message: 'Invalid receipt confirm payload.',
     });
   });
 });

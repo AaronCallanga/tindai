@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   assessReceiptOcrQuality,
+  confirmReceiptForOwner,
   isValidMatchReceiptInput,
+  isValidConfirmReceiptInput,
   isValidParseReceiptInput,
   isValidReceiptOcrInput,
   mergeGeminiReceiptNames,
@@ -14,8 +16,25 @@ import {
   standardizeParsedReceiptResultWithDictionary,
   shouldAttemptGeminiReceiptEnrichment,
 } from '../models/receipts.model';
+import { getSupabaseAdminClient } from '../config/supabase';
+import { getStoreByOwnerId } from '../models/store.model';
+
+vi.mock('../config/supabase', () => ({
+  getSupabaseAdminClient: vi.fn(),
+}));
+
+vi.mock('../models/store.model', () => ({
+  getStoreByOwnerId: vi.fn(),
+}));
+
+const mockedGetSupabaseAdminClient = vi.mocked(getSupabaseAdminClient);
+const mockedGetStoreByOwnerId = vi.mocked(getStoreByOwnerId);
 
 describe('receipts.model', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('normalizes OCR text for downstream parsing', () => {
     expect(normalizeOcrText('  COKE   1.5L \n 2 65.00  ')).toBe('COKE 1.5L 2 65.00');
   });
@@ -89,6 +108,39 @@ describe('receipts.model', () => {
     expect(
       isValidMatchReceiptInput({
         items: [],
+      }),
+    ).toBe(false);
+  });
+
+  it('validates the receipt confirm payload shape', () => {
+    expect(
+      isValidConfirmReceiptInput({
+        items: [
+          {
+            receiptItemId: 'receipt-1-item-1',
+            action: 'MATCH_EXISTING',
+            productId: 'item-1',
+            quantity: 2,
+            unitCost: 65,
+            rawName: 'COKE 1.5L',
+          },
+          {
+            receiptItemId: 'receipt-1-item-2',
+            action: 'SKIP',
+            rawName: 'PLASTIC BAG',
+          },
+        ],
+      }),
+    ).toBe(true);
+
+    expect(
+      isValidConfirmReceiptInput({
+        items: [
+          {
+            receiptItemId: 'receipt-1-item-1',
+            action: 'MATCH_EXISTING',
+          },
+        ],
       }),
     ).toBe(false);
   });
@@ -483,5 +535,169 @@ describe('receipts.model', () => {
       matchStatus: 'HIGH_CONFIDENCE',
       suggestedProductId: 'item-chsdog',
     });
+  });
+
+  it('confirms receipt items by creating transaction, movement, and alias updates', async () => {
+    mockedGetStoreByOwnerId.mockResolvedValue({
+      id: 'store-1',
+      ownerId: 'user-1',
+      name: 'Tindai Store',
+      currencyCode: 'PHP',
+      timezone: 'Asia/Manila',
+      updatedAt: '2026-04-25T00:00:00.000Z',
+    });
+
+    const inventoryRows = [
+      {
+        id: 'item-1',
+        store_id: 'store-1',
+        name: 'Coca-Cola 1.5 Liter',
+        aliases: ['coke 1.5l'],
+        unit: 'pcs',
+        cost: 50,
+        price: 65,
+        current_stock: 12,
+        low_stock_threshold: 2,
+        is_active: true,
+        archived_at: null,
+        updated_at: '2026-04-25T00:00:00.000Z',
+      },
+    ];
+
+    const transactionsInsertSingle = vi.fn().mockResolvedValue({
+      data: { id: 'txn-1', metadata: null },
+      error: null,
+    });
+    const transactionsUpdateEq = vi.fn().mockResolvedValue({
+      error: null,
+    });
+    const transactionItemsInsertSingle = vi.fn().mockResolvedValue({
+      data: { id: 'txn-item-1' },
+      error: null,
+    });
+    const movementInsert = vi.fn().mockResolvedValue({
+      error: null,
+    });
+    const inventoryUpdateSelectSingle = vi.fn().mockResolvedValue({
+      data: {
+        ...inventoryRows[0],
+        aliases: ['coke 1.5l', 'COKE 1.5L'],
+      },
+      error: null,
+    });
+
+    const from = vi.fn((table: string) => {
+      if (table === 'transactions') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              })),
+            })),
+          })),
+          insert: vi.fn(() => ({
+            select: vi.fn(() => ({
+              single: transactionsInsertSingle,
+            })),
+          })),
+          update: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: transactionsUpdateEq,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'inventory_items') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                is: vi.fn().mockResolvedValue({
+                  data: inventoryRows,
+                  error: null,
+                }),
+              })),
+            })),
+          })),
+          update: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                is: vi.fn(() => ({
+                  select: vi.fn(() => ({
+                    single: inventoryUpdateSelectSingle,
+                  })),
+                })),
+              })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'transaction_items') {
+        return {
+          insert: vi.fn(() => ({
+            select: vi.fn(() => ({
+              single: transactionItemsInsertSingle,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'inventory_movements') {
+        return {
+          insert: movementInsert,
+        };
+      }
+
+      throw new Error(`Unhandled table mock: ${table}`);
+    });
+
+    mockedGetSupabaseAdminClient.mockReturnValue({ from } as never);
+
+    const result = await confirmReceiptForOwner('user-1', 'receipt-1', 'receipt-confirm-1', {
+      items: [
+        {
+          receiptItemId: 'receipt-1-item-1',
+          action: 'MATCH_EXISTING',
+          productId: 'item-1',
+          quantity: 2,
+          unitCost: 65,
+          rawName: 'COKE 1.5L',
+          displayName: 'Coca-Cola 1.5 Liter',
+          matchedAlias: 'COKE 1.5L',
+        },
+        {
+          receiptItemId: 'receipt-1-item-2',
+          action: 'SKIP',
+          rawName: 'PLASTIC BAG',
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      receiptId: 'receipt-1',
+      status: 'COMMITTED',
+      transactionId: 'txn-1',
+      appliedItems: 1,
+      skippedItems: 1,
+      aliasesSaved: 1,
+      createdItems: 0,
+    });
+    expect(movementInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        store_id: 'store-1',
+        item_id: 'item-1',
+        transaction_id: 'txn-1',
+        transaction_item_id: 'txn-item-1',
+        movement_type: 'receipt_import',
+        quantity_delta: 2,
+        client_mutation_id: 'receipt-confirm-1:0',
+      }),
+    );
   });
 });

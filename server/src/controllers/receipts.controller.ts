@@ -1,10 +1,13 @@
 import type { Request, Response } from 'express';
 
 import {
+  confirmReceiptForOwner,
+  isValidConfirmReceiptInput,
   isValidMatchReceiptInput,
   isValidParseReceiptInput,
   isValidReceiptOcrInput,
   matchReceiptForOwner,
+  type ConfirmReceiptInput,
   type MatchReceiptInput,
   parseReceiptForOwner,
   type ParseReceiptInput,
@@ -132,6 +135,52 @@ export async function matchReceipt(
   const unmatchedCount = result.items.filter((item) => item.matchStatus === 'UNMATCHED').length;
   console.info(
     `[receipt] match ok userId=${user.id} receiptId=${req.params.receiptId} high=${highConfidenceCount} review=${needsReviewCount} unmatched=${unmatchedCount} durationMs=${Date.now() - startedAt}`,
+  );
+  return res.status(200).json(result);
+}
+
+export async function confirmReceipt(
+  req: Request<ProcessReceiptOcrParams, unknown, ConfirmReceiptInput>,
+  res: Response,
+) {
+  const startedAt = Date.now();
+  const user = req.user;
+  if (!user) {
+    console.warn(`[receipt] confirm unauthorized receiptId=${req.params.receiptId ?? 'missing'}`);
+    return res.status(401).json({
+      message: 'Unauthorized.',
+    });
+  }
+
+  if (!req.params.receiptId?.trim()) {
+    console.warn(`[receipt] confirm invalid-receipt-id userId=${user.id}`);
+    return res.status(400).json({
+      message: 'receiptId is required.',
+    });
+  }
+
+  if (!isValidConfirmReceiptInput(req.body)) {
+    console.warn(
+      `[receipt] confirm invalid-payload userId=${user.id} receiptId=${req.params.receiptId}`,
+    );
+    return res.status(400).json({
+      message: 'Invalid receipt confirm payload.',
+    });
+  }
+
+  const idempotencyKey = req.header('Idempotency-Key')?.trim();
+  if (!idempotencyKey) {
+    return res.status(400).json({
+      message: 'Idempotency-Key header is required.',
+    });
+  }
+
+  console.info(
+    `[receipt] confirm start userId=${user.id} receiptId=${req.params.receiptId} items=${req.body.items.length}`,
+  );
+  const result = await confirmReceiptForOwner(user.id, req.params.receiptId, idempotencyKey, req.body);
+  console.info(
+    `[receipt] confirm ok userId=${user.id} receiptId=${req.params.receiptId} applied=${result.appliedItems} skipped=${result.skippedItems} durationMs=${Date.now() - startedAt}`,
   );
   return res.status(200).json(result);
 }

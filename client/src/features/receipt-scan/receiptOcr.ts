@@ -29,7 +29,7 @@ export type ReceiptProcessingState =
       status: 'idle';
     }
   | {
-      status: 'running_ocr' | 'uploading_ocr' | 'parsing_receipt' | 'matching_items';
+      status: 'running_ocr' | 'uploading_ocr' | 'parsing_receipt' | 'matching_items' | 'confirming_receipt';
       receiptId: string;
     }
   | {

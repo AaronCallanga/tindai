@@ -18,6 +18,7 @@ const mockedSubmitFallbackCommand = vi.fn(async () => undefined);
 const mockedCreateLocalCustomer = vi.fn(async (name: string) => ({ id: 'customer-2', name }));
 const mockedCreateLocalInventoryItem = vi.fn(async () => undefined);
 const mockedSubmitAssistantQuestion = vi.fn();
+const mockedLoadAnalyticsSalesRows = vi.fn();
 
 let mockedAuthMode: 'guest' | 'authenticated' = 'authenticated';
 let mockedMicrophonePermission: 'granted' | 'denied' | 'pending' = 'granted';
@@ -107,6 +108,10 @@ vi.mock('@/features/assistant/assistantLanguageDetection', () => ({
   detectLanguageStyle: () => 'tagalog',
 }));
 
+vi.mock('@/features/analytics/analyticsRepository', () => ({
+  loadAnalyticsSalesRows: (...args: unknown[]) => mockedLoadAnalyticsSalesRows(...args),
+}));
+
 vi.mock('@/services/ttsService', () => ({
   getLanguageCode: () => 'fil-PH',
   speakText: async () => ({ spoken: true, fallbackUsed: false }),
@@ -163,6 +168,19 @@ describe('DashboardScreen', () => {
     mockedCreateLocalCustomer.mockClear();
     mockedCreateLocalInventoryItem.mockClear();
     mockedSubmitAssistantQuestion.mockReset();
+    mockedLoadAnalyticsSalesRows.mockReset();
+    mockedLoadAnalyticsSalesRows.mockResolvedValue([
+      {
+        itemId: 'item-1',
+        itemName: 'Coke Mismo',
+        unit: 'pcs',
+        quantityDelta: -3,
+        unitPrice: 20,
+        lineTotal: 60,
+        occurredAt: '2026-04-26T01:00:00.000Z',
+        isUtang: false,
+      },
+    ]);
   });
 
   afterEach(() => {
@@ -174,7 +192,9 @@ describe('DashboardScreen', () => {
 
     expect(findTextNodes(tree, 'Mercado Store')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Pindutin para magtala ng benta')).not.toHaveLength(0);
-    expect(findTextNodes(tree, 'Buod ngayong araw')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Benta ngayong araw')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'P60')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Nabentang piraso')).not.toHaveLength(0);
   });
 
   it('shows guest backup messaging and the add-item action', async () => {

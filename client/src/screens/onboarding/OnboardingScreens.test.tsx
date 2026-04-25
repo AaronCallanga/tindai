@@ -21,6 +21,7 @@ const originalConsoleError = console.error;
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 let mockedMicrophonePermission: 'pending' | 'granted' | 'denied' = 'pending';
 let mockedStoragePermission: 'pending' | 'granted' | 'denied' = 'pending';
+let mockedIsGoogleSignInEnabled = true;
 
 vi.mock('@expo/vector-icons', () => ({
   Feather: ({ ...props }: { children?: React.ReactNode }) => createElement('mock-icon', props),
@@ -66,6 +67,7 @@ vi.mock('@/context/AuthContext', () => ({
     authError: null,
     clearAuthError: mockedClearAuthError,
     googleSignInHint: null,
+    isGoogleSignInEnabled: mockedIsGoogleSignInEnabled,
     microphonePermission: mockedMicrophonePermission,
     storagePermission: mockedStoragePermission,
     requestMicrophonePermission: mockedRequestMicrophonePermission,
@@ -75,6 +77,7 @@ vi.mock('@/context/AuthContext', () => ({
 }));
 
 import { LoginScreen } from '@/screens/auth/LoginScreen';
+import { SignUpScreen } from '@/screens/auth/SignUpScreen';
 import { AuthChoiceScreen } from './AuthChoiceScreen';
 import { OnboardingOverlay } from './OnboardingOverlay';
 import { PermissionsScreen } from './PermissionsScreen';
@@ -122,6 +125,7 @@ describe('onboarding screens', () => {
 
     mockedMicrophonePermission = 'pending';
     mockedStoragePermission = 'pending';
+    mockedIsGoogleSignInEnabled = true;
     mockedChooseGuestMode.mockClear();
     mockedShowLogin.mockClear();
     mockedShowSignUp.mockClear();
@@ -166,6 +170,19 @@ describe('onboarding screens', () => {
     expect(findTextNodes(tree, 'Mag-sign in gamit ang Google')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Magpatuloy')).not.toHaveLength(0);
     expect(tree.root.findAll((node) => String(node.type) === 'mock-icon' && node.props.name === 'eye')).not.toHaveLength(0);
+  });
+
+  it('renders Google sign-up copy on the sign-up screen', async () => {
+    const tree = await renderScreen(createElement(SignUpScreen));
+
+    expect(findTextNodes(tree, 'Gumawa ng account gamit ang Google')).not.toHaveLength(0);
+  });
+
+  it('disables Google auth button when Google sign-in is unavailable', async () => {
+    mockedIsGoogleSignInEnabled = false;
+    const tree = await renderScreen(createElement(LoginScreen));
+
+    expect(findPressable(tree, 'Mag-sign in gamit ang Google').props.disabled).toBe(true);
   });
 
   it('renders step 3 permissions and completes through existing permission handlers', async () => {

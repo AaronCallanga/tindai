@@ -20,6 +20,7 @@ export function SignUpScreen() {
     authError,
     clearAuthError,
     googleSignInHint,
+    isGoogleSignInEnabled,
   } = useAuth();
   const [fullName, setFullName] = useState('');
   const [storeName, setStoreName] = useState('');
@@ -63,6 +64,10 @@ export function SignUpScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (!isGoogleSignInEnabled || isGoogleSubmitting) {
+      return;
+    }
+
     setLocalError(null);
     setIsGoogleSubmitting(true);
     try {
@@ -162,10 +167,11 @@ export function SignUpScreen() {
       </View>
 
       <PrimaryButton
-        label={isGoogleSubmitting ? 'Nag-sign in gamit ang Google...' : 'Mag-sign in gamit ang Google'}
+        label={isGoogleSubmitting ? 'Gumagawa ng account gamit ang Google...' : 'Gumawa ng account gamit ang Google'}
         onPress={handleGoogleSignIn}
         variant="ghost"
         leadingIcon={<GoogleSignInMark />}
+        disabled={!isGoogleSignInEnabled || isGoogleSubmitting}
       />
 
       {googleSignInHint ? <Text style={styles.infoText}>{googleSignInHint}</Text> : null}

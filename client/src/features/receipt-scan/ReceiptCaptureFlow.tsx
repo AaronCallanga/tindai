@@ -12,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { Camera, type PhotoFile, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
 import {
@@ -24,6 +23,37 @@ import {
 } from '@/features/receipt-scan/receiptCapture';
 import { colors } from '@/navigation/colors';
 
+type CameraPhotoResult = {
+  path: string;
+};
+
+type CameraPermissionState = {
+  hasPermission: boolean;
+  requestPermission: () => Promise<boolean>;
+};
+
+type CameraModule = {
+  Camera: any;
+  useCameraDevice: (position: 'back' | 'front') => unknown | null;
+  useCameraPermission: () => CameraPermissionState;
+};
+
+const fallbackCameraPermission: CameraPermissionState = {
+  hasPermission: false,
+  requestPermission: async () => false,
+};
+
+let cachedCameraModule: CameraModule | null = null;
+
+try {
+  const module = require('react-native-vision-camera') as CameraModule;
+  cachedCameraModule = module;
+} catch (error) {
+  if (__DEV__) {
+    console.warn('[receipt] camera unavailable, using gallery fallback', error);
+  }
+}
+
 type ReceiptCaptureFlowProps = {
   visible: boolean;
   onClose: () => void;
@@ -31,9 +61,13 @@ type ReceiptCaptureFlowProps = {
 };
 
 export function ReceiptCaptureFlow({ visible, onClose, onSaveDraft }: ReceiptCaptureFlowProps) {
-  const cameraRef = useRef<Camera>(null);
-  const device = useCameraDevice('back');
-  const { hasPermission, requestPermission } = useCameraPermission();
+  const cameraRef = useRef<{ takePhoto?: (options?: unknown) => Promise<CameraPhotoResult> } | null>(null);
+  const useCameraDeviceHook = cachedCameraModule?.useCameraDevice ?? (() => null);
+  const useCameraPermissionHook = cachedCameraModule?.useCameraPermission ?? (() => fallbackCameraPermission);
+  const device = useCameraDeviceHook('back');
+  const { hasPermission, requestPermission } = useCameraPermissionHook();
+  const CameraView = cachedCameraModule?.Camera;
+  const isCameraAvailable = Boolean(CameraView);
   const [flashEnabled, setFlashEnabled] = useState(false);
   const [draft, setDraft] = useState<ReceiptImageDraft | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -76,8 +110,13 @@ export function ReceiptCaptureFlow({ visible, onClose, onSaveDraft }: ReceiptCap
   }
 
   async function handleCapturePhoto() {
+    if (!isCameraAvailable) {
+      setErrorMessage('Hindi maihanda ang camera ngayon. Pumili muna ng larawan mula sa gallery.');
+      return;
+    }
+
     try {
-      const photoFile: PhotoFile | undefined = await cameraRef.current?.takePhoto({
+      const photoFile = await cameraRef.current?.takePhoto?.({
         flash: flashEnabled ? 'on' : 'off',
         enableShutterSound: true,
       });
@@ -234,11 +273,15 @@ export function ReceiptCaptureFlow({ visible, onClose, onSaveDraft }: ReceiptCap
             {!hasPermission ? (
               <View style={styles.permissionCard}>
                 <Ionicons color={colors.primaryDeep} name="camera-outline" size={28} />
-                <Text style={styles.permissionTitle}>Kailangan ng camera access</Text>
-                <Text style={styles.permissionText}>
-                  Payagan ang camera para makakuha ng litrato ng supplier receipt.
+                <Text style={styles.permissionTitle}>
+                  {isCameraAvailable ? 'Kailangan ng camera access' : 'Hindi maihanda ang camera'}
                 </Text>
-                <PrimaryButton label="Payagan ang camera" onPress={() => void requestPermission()} />
+                <Text style={styles.permissionText}>
+                  {isCameraAvailable
+                    ? 'Payagan ang camera para makakuha ng litrato ng supplier receipt.'
+                    : 'Pwede ka pa ring magpatuloy gamit ang larawan mula sa gallery.'}
+                </Text>
+                {isCameraAvailable ? <PrimaryButton label="Payagan ang camera" onPress={() => void requestPermission()} /> : null}
                 <PrimaryButton
                   label="Pumili sa gallery"
                   onPress={() => void handlePickFromGallery()}
@@ -246,10 +289,10 @@ export function ReceiptCaptureFlow({ visible, onClose, onSaveDraft }: ReceiptCap
                   leadingIcon={<Ionicons color={colors.primaryDeep} name="images-outline" size={18} />}
                 />
               </View>
-            ) : device ? (
+            ) : isCameraAvailable && device ? (
               <>
                 <View style={styles.cameraCard}>
-                  <Camera
+                  <CameraView
                     ref={cameraRef}
                     style={styles.camera}
                     device={device}

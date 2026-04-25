@@ -19,6 +19,7 @@ export function LoginScreen() {
     authError,
     clearAuthError,
     googleSignInHint,
+    isGoogleSignInEnabled,
   } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,6 +47,10 @@ export function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (!isGoogleSignInEnabled || isGoogleSubmitting) {
+      return;
+    }
+
     setIsGoogleSubmitting(true);
     try {
       await signInWithGoogle();
@@ -106,6 +111,7 @@ export function LoginScreen() {
         onPress={handleGoogleSignIn}
         variant="ghost"
         leadingIcon={<GoogleSignInMark />}
+        disabled={!isGoogleSignInEnabled || isGoogleSubmitting}
       />
 
       {googleSignInHint ? <Text style={styles.infoText}>{googleSignInHint}</Text> : null}

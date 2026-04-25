@@ -180,7 +180,18 @@ describe('ProfileScreen', () => {
     expect(findTextNodes(tree, 'ana@example.com')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Mercado Store')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'AM')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Offline Mode / Online Mode')).not.toHaveLength(0);
     expect(findPressable(tree, 'Ayusin ang profile')).toBeDefined();
+  });
+
+  it('switches to phone-only demo mode from profile', async () => {
+    const tree = await renderProfileScreen();
+
+    await act(async () => {
+      await findPressable(tree, 'Offline Mode').props.onPress();
+    });
+
+    expect(mockedSignOut).toHaveBeenCalledTimes(1);
   });
 
   it('enters edit mode with current values prefilled', async () => {
@@ -284,6 +295,11 @@ describe('ProfileScreen', () => {
 
     const tree = await renderProfileScreen();
 
+    await act(async () => {
+      await findPressable(tree, 'Online Mode').props.onPress();
+    });
+
+    expect(mockedShowLogin).toHaveBeenCalledTimes(1);
     expect(findTextNodes(tree, 'Gumawa ng Account')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Mag-log In')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Walang email')).not.toHaveLength(0);

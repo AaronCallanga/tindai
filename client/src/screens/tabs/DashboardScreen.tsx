@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -17,6 +17,11 @@ import { detectLanguageStyle } from "@/features/assistant/assistantLanguageDetec
 import type { CommandSource } from "@/features/commands/localCommandService";
 import { useAuth } from "@/context/AuthContext";
 import { useLocalData } from "@/features/local-data/LocalDataContext";
+import {
+  buildAnalyticsViewModel,
+  type AnalyticsSalesRow,
+} from "@/features/analytics/buildAnalyticsViewModel";
+import { loadAnalyticsSalesRows } from "@/features/analytics/analyticsRepository";
 import type { ParserResult } from "@/features/parser/offlineParser";
 import {
   getLanguageCode,
@@ -136,6 +141,9 @@ export function DashboardScreen() {
   const [itemPrice, setItemPrice] = useState("");
   const [itemFormError, setItemFormError] = useState<string | null>(null);
   const [isSavingItem, setIsSavingItem] = useState(false);
+  const [analyticsSalesRows, setAnalyticsSalesRows] = useState<
+    AnalyticsSalesRow[]
+  >([]);
   const hasSpeechRecognitionNative = speechRecognitionRuntime !== null;
   const isGuestMode = authMode === "guest" || appState?.mode === "guest";
   const isMicDisabled = microphonePermission === "denied";
@@ -154,6 +162,54 @@ export function DashboardScreen() {
         0,
       ),
     [inventoryItems],
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateSalesRows = async () => {
+      if (!store) {
+        if (isMounted) {
+          setAnalyticsSalesRows([]);
+        }
+        return;
+      }
+
+      try {
+        const rows = await loadAnalyticsSalesRows(store.id);
+        if (isMounted) {
+          setAnalyticsSalesRows(rows);
+        }
+      } catch {
+        if (isMounted) {
+          setAnalyticsSalesRows([]);
+        }
+      }
+    };
+
+    void hydrateSalesRows();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [store?.id]);
+
+  const dashboardOverview = useMemo(
+    () =>
+      buildAnalyticsViewModel({
+        currencyCode: store?.currencyCode ?? "PHP",
+        timezone: store?.timezone ?? "Asia/Manila",
+        inventoryItems,
+        customers,
+        salesRows: analyticsSalesRows,
+      }).overview,
+    [
+      analyticsSalesRows,
+      customers,
+      inventoryItems,
+      store?.currencyCode,
+      store?.timezone,
+    ],
   );
 
   const selectedFallbackItem = useMemo(
@@ -808,7 +864,31 @@ export function DashboardScreen() {
         ) : null}
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Buod ngayong araw</Text>
+          <Text style={styles.sectionTitle}>Benta ngayong araw</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryValue}>
+              {dashboardOverview.salesToday.value}
+            </Text>
+            <Text style={styles.summaryLabel}>Benta ngayon</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryValue}>
+              {dashboardOverview.itemsSoldToday.value}
+            </Text>
+            <Text style={styles.summaryLabel}>Nabentang piraso</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryValue}>
+              {dashboardOverview.salesThisMonth.value}
+            </Text>
+            <Text style={styles.summaryLabel}>Benta ngayong buwan</Text>
+          </View>
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Kalagayan ng paninda</Text>
         </View>
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
@@ -820,9 +900,7 @@ export function DashboardScreen() {
             <Text style={styles.summaryLabel}>Malapit maubos</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>
-              P{inventoryValue.toFixed(0)}
-            </Text>
+            <Text style={styles.summaryValue}>P{inventoryValue.toFixed(0)}</Text>
             <Text style={styles.summaryLabel}>Halaga ng paninda</Text>
           </View>
         </View>

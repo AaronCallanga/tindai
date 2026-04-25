@@ -82,6 +82,7 @@ export function ProfileScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isRemovingAvatar, setIsRemovingAvatar] = useState(false);
+  const [isSwitchingDemoMode, setIsSwitchingDemoMode] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -144,6 +145,7 @@ export function ProfileScreen() {
   const displayStore = getDisplayStore(store?.name);
   const avatarUrl = getAvatarUrl(profile);
   const avatarInitials = getInitials(displayName);
+  const isOfflineDemoMode = !isAuthenticated;
   const helperBody = isAuthenticated
     ? 'Naka-save sa phone na ito ang detalye ng tindahan mo.'
     : 'Mag-sign in para may online backup ang tala ng tindahan mo. Mananatili pa rin ito sa phone mo kahit walang internet.';
@@ -236,6 +238,26 @@ export function ProfileScreen() {
     }
   };
 
+  const handleToggleDemoMode = async () => {
+    if (isSwitchingDemoMode) {
+      return;
+    }
+
+    setIsSwitchingDemoMode(true);
+    setErrorMessage(null);
+    try {
+      if (isOfflineDemoMode) {
+        await showLogin();
+      } else {
+        await signOut();
+      }
+    } catch (caughtError) {
+      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Hindi mabago ang mode ngayon. Subukan ulit.');
+    } finally {
+      setIsSwitchingDemoMode(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.contentContainer} style={styles.screen}>
@@ -272,6 +294,28 @@ export function ProfileScreen() {
             </View>
 
             <Text style={styles.infoBody}>{helperBody}</Text>
+          </View>
+
+          <View style={styles.demoModeCard}>
+            <Text style={styles.demoModeTitle}>Offline Mode / Online Mode</Text>
+            <Text style={styles.demoModeBody}>
+              {isOfflineDemoMode
+                ? 'Bukas ito: phone lang muna ang gamit ng tindahan mo.'
+                : 'Patayin ito kung gusto mong phone lang muna habang demo.'}
+            </Text>
+            <Pressable
+              style={styles.demoModeButton}
+              onPress={() => void handleToggleDemoMode()}
+              disabled={isSwitchingDemoMode}
+            >
+              <Text style={styles.demoModeButtonLabel}>
+                {isSwitchingDemoMode
+                  ? 'Ina-update...'
+                  : isOfflineDemoMode
+                    ? 'Online Mode'
+                    : 'Offline Mode'}
+              </Text>
+            </Pressable>
           </View>
 
           <View style={styles.detailsCard}>
@@ -521,6 +565,39 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     lineHeight: 21,
+  },
+  demoModeCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(20, 87, 70, 0.08)',
+    backgroundColor: colors.surface,
+    padding: 16,
+    gap: 12,
+  },
+  demoModeTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  demoModeBody: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  demoModeButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(102, 112, 107, 0.24)',
+    backgroundColor: '#E8F2F0',
+    paddingHorizontal: 16,
+  },
+  demoModeButtonLabel: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
   },
   detailsCard: {
     borderRadius: 24,

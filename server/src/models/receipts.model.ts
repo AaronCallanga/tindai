@@ -114,6 +114,34 @@ export type MatchReceiptResult = {
   items: MatchReceiptResultItem[];
 };
 
+export type ConfirmReceiptAction = 'MATCH_EXISTING' | 'CREATE_PRODUCT' | 'SKIP';
+
+export type ConfirmReceiptInputItem = {
+  receiptItemId: string;
+  action: ConfirmReceiptAction;
+  productId?: string;
+  createProductName?: string;
+  quantity?: number;
+  unitCost?: number | null;
+  rawName: string;
+  displayName?: string;
+  matchedAlias?: string | null;
+};
+
+export type ConfirmReceiptInput = {
+  items: ConfirmReceiptInputItem[];
+};
+
+export type ConfirmReceiptResult = {
+  receiptId: string;
+  status: 'COMMITTED';
+  transactionId: string;
+  appliedItems: number;
+  skippedItems: number;
+  aliasesSaved: number;
+  createdItems: number;
+};
+
 const MIN_USABLE_CHARACTER_COUNT = 12;
 const MIN_WORD_COUNT = 3;
 const MAX_RAW_TEXT_LENGTH = 20000;
@@ -213,6 +241,21 @@ type ReceiptEnrichmentInventoryRecord = {
   aliases: string[] | null;
 };
 
+type ReceiptInventoryWriteRecord = {
+  id: string;
+  store_id: string;
+  name: string;
+  aliases: string[] | null;
+  unit: string;
+  cost: number | string | null;
+  price: number | string;
+  current_stock: number | string;
+  low_stock_threshold: number | string;
+  is_active: boolean;
+  archived_at: string | null;
+  updated_at: string;
+};
+
 type ReceiptMatchCandidate = {
   productId: string;
   productName: string;
@@ -291,6 +334,69 @@ export function isValidMatchReceiptInput(value: unknown): value is MatchReceiptI
 
     const candidate = item as Partial<MatchReceiptInputItem>;
     return typeof candidate.receiptItemId === 'string' && candidate.receiptItemId.trim().length > 0 && typeof candidate.rawName === 'string' && candidate.rawName.trim().length > 0;
+  });
+}
+
+export function isValidConfirmReceiptInput(value: unknown): value is ConfirmReceiptInput {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const payload = value as Partial<ConfirmReceiptInput>;
+  if (!Array.isArray(payload.items) || payload.items.length === 0) {
+    return false;
+  }
+
+  return payload.items.every((item) => {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+
+    const candidate = item as Partial<ConfirmReceiptInputItem>;
+    if (typeof candidate.receiptItemId !== 'string' || candidate.receiptItemId.trim().length === 0) {
+      return false;
+    }
+
+    if (typeof candidate.rawName !== 'string' || candidate.rawName.trim().length === 0) {
+      return false;
+    }
+
+    if (
+      candidate.action !== 'MATCH_EXISTING' &&
+      candidate.action !== 'CREATE_PRODUCT' &&
+      candidate.action !== 'SKIP'
+    ) {
+      return false;
+    }
+
+    if (candidate.action === 'SKIP') {
+      return true;
+    }
+
+    if (
+      typeof candidate.quantity !== 'number' ||
+      Number.isNaN(candidate.quantity) ||
+      candidate.quantity <= 0
+    ) {
+      return false;
+    }
+
+    if (
+      candidate.unitCost !== undefined &&
+      candidate.unitCost !== null &&
+      (typeof candidate.unitCost !== 'number' || Number.isNaN(candidate.unitCost) || candidate.unitCost < 0)
+    ) {
+      return false;
+    }
+
+    if (candidate.action === 'MATCH_EXISTING') {
+      return typeof candidate.productId === 'string' && candidate.productId.trim().length > 0;
+    }
+
+    return (
+      typeof candidate.createProductName === 'string' &&
+      candidate.createProductName.trim().length > 0
+    );
   });
 }
 
@@ -1283,4 +1389,296 @@ export async function matchReceiptForOwner(
   }
 
   return matchReceiptItemsAgainstCatalog(receiptId, standardizedItems, data ?? []);
+}
+
+function normalizeInventoryAlias(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function mergeInventoryAliases(existingAliases: string[] | null | undefined, nextAliases: Array<string | null | undefined>) {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of [...(existingAliases ?? []), ...nextAliases]) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+
+    const normalized = normalizeInventoryAlias(value);
+    if (!normalized) {
+      continue;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(normalized);
+  }
+
+  return merged;
+}
+
+function toFiniteNumber(value: number | string | null | undefined) {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export async function confirmReceiptForOwner(
+  ownerId: string,
+  receiptId: string,
+  idempotencyKey: string,
+  input: ConfirmReceiptInput,
+): Promise<ConfirmReceiptResult> {
+  const store = await getStoreByOwnerId(ownerId);
+  if (!store) {
+    throw new Error('Store not found.');
+  }
+
+  const normalizedIdempotencyKey = idempotencyKey.trim();
+  if (!normalizedIdempotencyKey) {
+    throw new Error('Idempotency key is required.');
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { data: existingTransaction, error: existingTransactionError } = await supabase
+    .from('transactions')
+    .select('id, metadata')
+    .eq('store_id', store.id)
+    .eq('client_mutation_id', normalizedIdempotencyKey)
+    .maybeSingle<{ id: string; metadata: Record<string, unknown> | null }>();
+
+  if (existingTransactionError) {
+    throw new Error('Unable to verify receipt confirm idempotency.');
+  }
+
+  if (existingTransaction) {
+    const metadata = existingTransaction.metadata ?? {};
+    return {
+      receiptId,
+      status: 'COMMITTED',
+      transactionId: existingTransaction.id,
+      appliedItems: Number(metadata.appliedItems ?? 0),
+      skippedItems: Number(metadata.skippedItems ?? 0),
+      aliasesSaved: Number(metadata.aliasesSaved ?? 0),
+      createdItems: Number(metadata.createdItems ?? 0),
+    };
+  }
+
+  const { data: inventoryRows, error: inventoryError } = await supabase
+    .from('inventory_items')
+    .select('id, store_id, name, aliases, unit, cost, price, current_stock, low_stock_threshold, is_active, archived_at, updated_at')
+    .eq('store_id', store.id)
+    .eq('is_active', true)
+    .is('archived_at', null);
+
+  if (inventoryError) {
+    throw new Error('Unable to load store inventory for receipt confirm.');
+  }
+
+  const inventoryById = new Map((inventoryRows ?? []).map((row) => [row.id, row]));
+  const inventoryByName = new Map(
+    (inventoryRows ?? []).map((row) => [row.name.trim().toLowerCase(), row]),
+  );
+
+  let appliedItems = 0;
+  let skippedItems = 0;
+  let aliasesSaved = 0;
+  let createdItems = 0;
+
+  const nowIso = new Date().toISOString();
+  const transactionMetadata = {
+    source: 'receipt_confirm',
+    receiptId,
+    appliedItems: 0,
+    skippedItems: 0,
+    aliasesSaved: 0,
+    createdItems: 0,
+  };
+  const { data: createdTransaction, error: createTransactionError } = await supabase
+    .from('transactions')
+    .insert({
+      store_id: store.id,
+      created_by: ownerId,
+      client_mutation_id: normalizedIdempotencyKey,
+      source: 'manual',
+      raw_text: `receipt:${receiptId}`,
+      parser_source: 'receipt_confirm',
+      sync_status: 'verified',
+      is_utang: false,
+      occurred_at: nowIso,
+      synced_at: nowIso,
+      verified_at: nowIso,
+      metadata: transactionMetadata,
+    })
+    .select('id')
+    .single<{ id: string }>();
+
+  if (createTransactionError || !createdTransaction) {
+    throw new Error('Unable to create receipt confirm transaction.');
+  }
+
+  for (let index = 0; index < input.items.length; index += 1) {
+    const item = input.items[index];
+
+    if (item.action === 'SKIP') {
+      skippedItems += 1;
+      continue;
+    }
+
+    let inventoryItem: ReceiptInventoryWriteRecord | null = null;
+
+    if (item.action === 'MATCH_EXISTING') {
+      inventoryItem = inventoryById.get(item.productId!.trim()) ?? null;
+      if (!inventoryItem) {
+        throw new Error(`Inventory item not found for receipt line ${item.receiptItemId}.`);
+      }
+    } else {
+      const nextName = item.createProductName!.trim();
+      inventoryItem = inventoryByName.get(nextName.toLowerCase()) ?? null;
+
+      if (!inventoryItem) {
+        const aliases = mergeInventoryAliases([], [nextName, item.rawName, item.displayName]);
+        const { data: createdItem, error: createItemError } = await supabase
+          .from('inventory_items')
+          .insert({
+            store_id: store.id,
+            name: nextName,
+            aliases,
+            unit: 'pcs',
+            cost: item.unitCost ?? null,
+            price: item.unitCost ?? 0,
+            low_stock_threshold: 0,
+          })
+          .select('id, store_id, name, aliases, unit, cost, price, current_stock, low_stock_threshold, is_active, archived_at, updated_at')
+          .single<ReceiptInventoryWriteRecord>();
+
+        if (createItemError || !createdItem) {
+          throw new Error(`Unable to create inventory item: ${nextName}.`);
+        }
+
+        inventoryItem = createdItem;
+        inventoryById.set(createdItem.id, createdItem);
+        inventoryByName.set(createdItem.name.trim().toLowerCase(), createdItem);
+        createdItems += 1;
+      }
+    }
+
+    const unitCost =
+      typeof item.unitCost === 'number'
+        ? Number(item.unitCost.toFixed(2))
+        : toFiniteNumber(inventoryItem.cost ?? inventoryItem.price);
+
+    const { data: createdTransactionItem, error: createTransactionItemError } = await supabase
+      .from('transaction_items')
+      .insert({
+        transaction_id: createdTransaction.id,
+        store_id: store.id,
+        item_id: inventoryItem.id,
+        spoken_name: item.displayName?.trim() || item.rawName.trim(),
+        quantity_delta: item.quantity,
+        unit_price: unitCost,
+        item_snapshot: {
+          name: inventoryItem.name,
+          unit: inventoryItem.unit,
+          receipt_item_id: item.receiptItemId,
+          receipt_id: receiptId,
+        },
+      })
+      .select('id')
+      .single<{ id: string }>();
+
+    if (createTransactionItemError || !createdTransactionItem) {
+      throw new Error('Unable to create receipt transaction item.');
+    }
+
+    const { error: createMovementError } = await supabase.from('inventory_movements').insert({
+      store_id: store.id,
+      item_id: inventoryItem.id,
+      transaction_id: createdTransaction.id,
+      transaction_item_id: createdTransactionItem.id,
+      movement_type: 'receipt_import',
+      quantity_delta: item.quantity,
+      reason: `Receipt confirm ${receiptId}`,
+      created_by: ownerId,
+      client_mutation_id: `${normalizedIdempotencyKey}:${index}`,
+      occurred_at: nowIso,
+      metadata: {
+        receipt_id: receiptId,
+        receipt_item_id: item.receiptItemId,
+        action: item.action,
+      },
+    });
+
+    if (createMovementError) {
+      throw new Error('Unable to create receipt inventory movement.');
+    }
+
+    const nextAliases = mergeInventoryAliases(inventoryItem.aliases, [
+      item.matchedAlias,
+      item.rawName,
+      item.displayName,
+      item.action === 'CREATE_PRODUCT' ? item.createProductName : null,
+    ]);
+    const previousAliasCount = (inventoryItem.aliases ?? []).length;
+    if (nextAliases.length > previousAliasCount) {
+      aliasesSaved += nextAliases.length - previousAliasCount;
+
+      const { data: updatedItem, error: updateAliasError } = await supabase
+        .from('inventory_items')
+        .update({
+          aliases: nextAliases,
+        })
+        .eq('store_id', store.id)
+        .eq('id', inventoryItem.id)
+        .is('archived_at', null)
+        .select('id, store_id, name, aliases, unit, cost, price, current_stock, low_stock_threshold, is_active, archived_at, updated_at')
+        .single<ReceiptInventoryWriteRecord>();
+
+      if (updateAliasError || !updatedItem) {
+        throw new Error('Unable to save receipt alias learning.');
+      }
+
+      inventoryItem = updatedItem;
+      inventoryById.set(updatedItem.id, updatedItem);
+      inventoryByName.set(updatedItem.name.trim().toLowerCase(), updatedItem);
+    }
+
+    appliedItems += 1;
+  }
+
+  const { error: finalizeTransactionError } = await supabase
+    .from('transactions')
+    .update({
+      metadata: {
+        source: 'receipt_confirm',
+        receiptId,
+        appliedItems,
+        skippedItems,
+        aliasesSaved,
+        createdItems,
+      },
+    })
+    .eq('store_id', store.id)
+    .eq('id', createdTransaction.id);
+
+  if (finalizeTransactionError) {
+    throw new Error('Unable to finalize receipt confirm summary.');
+  }
+
+  return {
+    receiptId,
+    status: 'COMMITTED',
+    transactionId: createdTransaction.id,
+    appliedItems,
+    skippedItems,
+    aliasesSaved,
+    createdItems,
+  };
 }

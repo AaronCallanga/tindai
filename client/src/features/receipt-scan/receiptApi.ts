@@ -47,6 +47,48 @@ export type MatchReceiptResponse = {
   items: MatchedReceiptItem[];
 };
 
+export type ConfirmReceiptRequestItem =
+  | {
+      receiptItemId: string;
+      action: 'MATCH_EXISTING';
+      productId: string;
+      quantity: number;
+      unitCost: number | null;
+      rawName: string;
+      displayName?: string;
+      matchedAlias?: string | null;
+    }
+  | {
+      receiptItemId: string;
+      action: 'CREATE_PRODUCT';
+      createProductName: string;
+      quantity: number;
+      unitCost: number | null;
+      rawName: string;
+      displayName?: string;
+      matchedAlias?: string | null;
+    }
+  | {
+      receiptItemId: string;
+      action: 'SKIP';
+      rawName: string;
+      displayName?: string;
+    };
+
+export type ConfirmReceiptRequest = {
+  items: ConfirmReceiptRequestItem[];
+};
+
+export type ConfirmReceiptResponse = {
+  receiptId: string;
+  status: 'COMMITTED';
+  transactionId: string;
+  appliedItems: number;
+  skippedItems: number;
+  aliasesSaved: number;
+  createdItems: number;
+};
+
 type ErrorResponse = {
   message?: string;
 };
@@ -60,6 +102,10 @@ function mapReceiptApiError(rawMessage: string | undefined, fallbackMessage: str
 
   if (message.includes('invalid receipt match payload')) {
     return 'Walang malinaw na listahan ng item sa resibo. Subukan ulit ang mas malinaw na kuha.';
+  }
+
+  if (message.includes('invalid receipt confirm payload')) {
+    return 'May kulang sa napiling ayos ng mga item. Balikan muna ang resibo bago ituloy.';
   }
 
   if (message.includes('invalid receipt parse payload')) {
@@ -159,6 +205,36 @@ export async function matchReceiptOnBackend(params: {
       mapReceiptApiError(
         (body as ErrorResponse | null)?.message,
         'Hindi mahanapan ng tugma ang mga item sa resibo.',
+      ),
+    );
+  }
+
+  return body;
+}
+
+export async function confirmReceiptOnBackend(params: {
+  accessToken: string;
+  receiptId: string;
+  idempotencyKey: string;
+  payload: ConfirmReceiptRequest;
+}): Promise<ConfirmReceiptResponse> {
+  const env = getClientEnv();
+  const response = await fetch(`${env.EXPO_PUBLIC_API_BASE_URL}/api/v1/receipts/${params.receiptId}/confirm`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': params.idempotencyKey,
+    },
+    body: JSON.stringify(params.payload),
+  });
+
+  const body = (await response.json().catch(() => null)) as ConfirmReceiptResponse | ErrorResponse | null;
+  if (!response.ok || !body || !('receiptId' in body)) {
+    throw new Error(
+      mapReceiptApiError(
+        (body as ErrorResponse | null)?.message,
+        'Hindi pa naisave ang napiling item mula sa resibo.',
       ),
     );
   }
