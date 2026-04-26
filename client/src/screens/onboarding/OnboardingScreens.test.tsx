@@ -161,6 +161,8 @@ describe('onboarding screens', () => {
   it('renders step 2 account connection shell around the login handlers', async () => {
     const tree = await renderScreen(createElement(LoginScreen));
 
+    expect(findTextNodes(tree, 'Hakbang 2 ng 4')).not.toHaveLength(0);
+    expect(findTextNodes(tree, 'Madaling Simula')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Back to Dashboard')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'Ikonekta ang account mo.')).not.toHaveLength(0);
     expect(findTextNodes(tree, 'G')).not.toHaveLength(0);

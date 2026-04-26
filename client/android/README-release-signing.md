@@ -1,7 +1,7 @@
 # Android Release Signing
 
 Use a real release keystore for distributable APK builds.
-Without `client/android/key.properties`, Gradle now builds an unsigned release APK for local smoke checks.
+Without `client/android/key.properties`, Gradle now builds a debug-signed release APK for local installs and smoke checks.
 
 ## Local files
 
@@ -38,10 +38,11 @@ APK output when `android/key.properties` exists:
 
 APK output when `android/key.properties` is missing:
 
-`client/android/app/build/outputs/apk/release/app-release-unsigned.apk`
+`client/android/app/build/outputs/apk/release/app-release.apk`
 
 ## Notes
 
 - Release builds use the local keystore from `android/key.properties` when it is available.
-- Unsigned release APKs are for local validation only. Install or distribute a release build only after signing it with a real keystore.
+- Without `android/key.properties`, release builds fall back to the local Android debug keystore so the APK can still be installed on a device for demo use.
+- Use a real release keystore before distributing the APK outside local demo and development installs.
 - The Expo asset bundle is limited to `src/assets/*` so design scratch files are not packed into the distributable APK.

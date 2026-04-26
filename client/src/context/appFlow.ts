@@ -162,6 +162,13 @@ export function getActiveRoute(state: AppFlowState): ActiveRoute {
       };
     }
 
+    if (state.authMode === 'account' && !state.isAuthenticated) {
+      return {
+        kind: 'auth',
+        screen: state.authScreen,
+      };
+    }
+
     return {
       kind: 'permissions',
     };

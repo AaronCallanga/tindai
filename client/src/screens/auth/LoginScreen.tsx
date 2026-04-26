@@ -57,6 +57,9 @@ export function LoginScreen() {
 
   return (
     <AuthLayout
+      topBarTitle={mobileCopy.onboardingTopBarTitle}
+      progressLabel="Hakbang 2 ng 4"
+      progressValue="50%"
       title="Ikonekta ang account mo."
       subtitle="I-save ang iyong imbentaryo at i-sync sa cloud para sa ligtas na backup."
       submitLabel="Magpatuloy"

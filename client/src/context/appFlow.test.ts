@@ -41,6 +41,18 @@ describe('appFlowReducer', () => {
     expect(getActiveRoute(signedIn)).toEqual({ kind: 'permissions' });
   });
 
+  it('keeps incomplete account onboarding on the auth step until the user is signed in', () => {
+    const incompleteAccount = {
+      ...initialAppFlowState,
+      authMode: 'account' as const,
+    };
+
+    expect(getActiveRoute(incompleteAccount)).toEqual({
+      kind: 'auth',
+      screen: 'login',
+    });
+  });
+
   it('restarts onboarding for a newly created account even when this phone had completed onboarding before', () => {
     const completedGuest = {
       ...initialAppFlowState,

@@ -128,7 +128,8 @@ android {
             if (hasReleaseKeystoreProperties) {
                 signingConfig signingConfigs.release
             } else {
-                logger.lifecycle("android/key.properties not found. Building an unsigned release APK; add a release keystore for a distributable build.")
+                logger.lifecycle("android/key.properties not found. Building a debug-signed release APK for local installs; add a release keystore for a distributable build.")
+                signingConfig signingConfigs.debug
             }
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds

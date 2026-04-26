@@ -4,6 +4,7 @@
     "slug": "tindai",
     "scheme": "tindai",
     "version": "1.0.0",
+    "icon": "./src/assets/tindai-logo.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "jsEngine": "hermes",
@@ -26,6 +27,7 @@
       "package": "com.example.tindai",
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/tindai-logo.png",
+        "monochromeImage": "./src/assets/tindai-logo-monochrome.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [

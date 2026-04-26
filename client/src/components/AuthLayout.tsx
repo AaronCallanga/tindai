@@ -8,6 +8,9 @@ import { colors } from '@/navigation/colors';
 type AuthLayoutProps = {
   title: string;
   subtitle: string;
+  topBarTitle?: string;
+  progressLabel?: string;
+  progressValue?: string;
   submitLabel?: string;
   alternateLabel?: string;
   onSubmit?: () => Promise<void> | void;
@@ -21,6 +24,9 @@ type AuthLayoutProps = {
 export function AuthLayout({
   title,
   subtitle,
+  topBarTitle,
+  progressLabel,
+  progressValue,
   submitLabel,
   alternateLabel,
   onSubmit,
@@ -48,6 +54,13 @@ export function AuthLayout({
 
   return (
     <SafeAreaView style={styles.screen}>
+      {topBarTitle ? (
+        <View style={styles.topBar}>
+          <View style={styles.topBarSpacer} />
+          <Text style={styles.topBarTitle}>{topBarTitle}</Text>
+          <View style={styles.topBarSpacer} />
+        </View>
+      ) : null}
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -59,6 +72,15 @@ export function AuthLayout({
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
+            {progressLabel ? (
+              <View style={styles.progressBlock}>
+                <Text style={styles.progressLabel}>{progressLabel}</Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, progressValue ? { width: progressValue } : null]} />
+                </View>
+              </View>
+            ) : null}
+
             <View style={styles.headerBlock}>
               <View style={styles.headerRow}>
                 {dismissLabel && onDismiss ? (
@@ -104,6 +126,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  topBar: {
+    minHeight: 64,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef1ee',
+    backgroundColor: colors.surface,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  topBarTitle: {
+    color: colors.primaryDeep,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  topBarSpacer: {
+    width: 40,
+  },
   keyboardAvoid: {
     flex: 1,
   },
@@ -119,6 +159,28 @@ const styles = StyleSheet.create({
     maxWidth: 440,
     alignSelf: 'center',
     gap: 24,
+  },
+  progressBlock: {
+    gap: 10,
+  },
+  progressLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  progressTrack: {
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#e0e3e0',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    width: '50%',
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.primary,
   },
   headerBlock: {
     gap: 12,

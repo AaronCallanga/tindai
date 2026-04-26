@@ -18,6 +18,15 @@ const mockedSubmitFallbackCommand = vi.fn(async () => undefined);
 const mockedCreateLocalCustomer = vi.fn(async (name: string) => ({ id: 'customer-2', name }));
 const mockedCreateLocalInventoryItem = vi.fn(async () => undefined);
 const mockedSubmitAssistantQuestion = vi.fn();
+const mockedReceiptCaptureFlow = vi.fn(
+  ({
+    visible,
+  }: {
+    visible: boolean;
+    onClose: () => void;
+    onSaveDraft: (draft: unknown) => Promise<void> | void;
+  }) => (visible ? createElement('mock-receipt-capture-flow') : null),
+);
 
 let mockedAuthMode: 'guest' | 'authenticated' = 'authenticated';
 let mockedMicrophonePermission: 'granted' | 'denied' | 'pending' = 'granted';
@@ -120,6 +129,18 @@ vi.mock('@/services/ttsService', () => ({
   stopSpeaking: async () => undefined,
 }));
 
+vi.mock('@/features/receipt-scan/ReceiptCaptureFlow', () => ({
+  ReceiptCaptureFlow: (props: {
+    visible: boolean;
+    onClose: () => void;
+    onSaveDraft: (draft: unknown) => Promise<void> | void;
+  }) => mockedReceiptCaptureFlow(props),
+}));
+
+vi.mock('@/features/receipt-scan/receiptCapture', () => ({
+  cleanupReceiptImageDraft: vi.fn(async () => undefined),
+}));
+
 import { DashboardScreen } from './DashboardScreen';
 
 function findTextNodes(tree: TestRenderer.ReactTestRenderer, text: string) {
@@ -134,7 +155,7 @@ function findByTestId(tree: TestRenderer.ReactTestRenderer, testID: string) {
   return tree.root.find((node) => node.props.testID === testID);
 }
 
-function flattenStyle(style: unknown) {
+function flattenStyle(style: unknown): Record<string, unknown> {
   if (Array.isArray(style)) {
     return style.reduce<Record<string, unknown>>(
       (accumulator, current) => ({
@@ -189,6 +210,7 @@ describe('DashboardScreen', () => {
     mockedCreateLocalCustomer.mockClear();
     mockedCreateLocalInventoryItem.mockClear();
     mockedSubmitAssistantQuestion.mockReset();
+    mockedReceiptCaptureFlow.mockClear();
   });
 
   afterEach(() => {
@@ -253,5 +275,28 @@ describe('DashboardScreen', () => {
     expect(flattenStyle(findByTestId(tree, 'dashboard-fallback-sheet').props.style)).toMatchObject({
       paddingBottom: 12,
     });
+  });
+
+  it('opens the receipt photo flow from the add-item actions', async () => {
+    const tree = await renderDashboardScreen();
+
+    expect(mockedReceiptCaptureFlow).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        visible: false,
+      }),
+    );
+
+    await act(async () => {
+      findByTestId(tree, 'dashboard-receipt-trigger').props.onPress();
+    });
+
+    expect(mockedReceiptCaptureFlow).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        visible: true,
+      }),
+    );
+    expect(
+      tree.root.findAll((node) => String(node.type) === 'mock-receipt-capture-flow'),
+    ).toHaveLength(1);
   });
 });

@@ -20,6 +20,11 @@ import { useAuth } from "@/context/AuthContext";
 import { useLocalData } from "@/features/local-data/LocalDataContext";
 import type { ParserResult } from "@/features/parser/offlineParser";
 import {
+  cleanupReceiptImageDraft,
+  type ReceiptImageDraft,
+} from "@/features/receipt-scan/receiptCapture";
+import { ReceiptCaptureFlow } from "@/features/receipt-scan/ReceiptCaptureFlow";
+import {
   getLanguageCode,
   speakText,
   stopSpeaking,
@@ -138,6 +143,7 @@ export function DashboardScreen() {
   const [guestBannerDismissed, setGuestBannerDismissed] = useState(false);
   const [micBannerDismissed, setMicBannerDismissed] = useState(false);
   const [isAddItemVisible, setIsAddItemVisible] = useState(false);
+  const [isReceiptCaptureVisible, setIsReceiptCaptureVisible] = useState(false);
   const [itemName, setItemName] = useState("");
   const [itemQuantity, setItemQuantity] = useState("0");
   const [itemCost, setItemCost] = useState("");
@@ -423,6 +429,24 @@ export function DashboardScreen() {
     }
   }, [createLocalInventoryItem, itemCost, itemName, itemPrice, itemQuantity]);
 
+  const handleReceiptDraftSaved = useCallback(
+    async (draft: ReceiptImageDraft) => {
+      try {
+        await cleanupReceiptImageDraft(draft);
+        setCommandMessage(
+          "Nakuha na ang larawan ng resibo. Ihahanda ang susunod na hakbang.",
+        );
+      } catch (caughtError) {
+        setCommandMessage(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Nakuha ang larawan pero may kailangang ayusin sa file.",
+        );
+      }
+    },
+    [],
+  );
+
   const startListening = useCallback(async () => {
     if (!hasSpeechRecognitionNative) {
       setCommandMessage(null);
@@ -665,13 +689,22 @@ export function DashboardScreen() {
             />
           </TouchableOpacity>
           <Text style={styles.voiceTitle}>Tap para magsalita ng utos</Text>
-          <Pressable
-            onPress={() => setIsAddItemVisible(true)}
-            style={styles.addItemButton}
-          >
-            <Ionicons color="#00604c" name="add-circle-outline" size={18} />
-            <Text style={styles.addItemButtonLabel}>Magdagdag ng item</Text>
-          </Pressable>
+          <View style={styles.quickActionRow}>
+            <Pressable
+              onPress={() => setIsAddItemVisible(true)}
+              style={styles.addItemButton}
+            >
+              <Ionicons color="#00604c" name="add-circle-outline" size={18} />
+              <Text style={styles.addItemButtonLabel}>Magdagdag ng item</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setIsReceiptCaptureVisible(true)}
+              style={styles.receiptActionButton}
+              testID="dashboard-receipt-trigger"
+            >
+              <Ionicons color="#00604c" name="camera-outline" size={18} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.commandCard}>
@@ -1134,6 +1167,12 @@ export function DashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      <ReceiptCaptureFlow
+        visible={isReceiptCaptureVisible}
+        onClose={() => setIsReceiptCaptureVisible(false)}
+        onSaveDraft={handleReceiptDraftSaved}
+      />
     </SafeAreaView>
   );
 }
@@ -1258,6 +1297,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
   },
+  quickActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   voiceButton: {
     width: 128,
     height: 128,
@@ -1287,6 +1331,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  receiptActionButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d8dbd9",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
   },
   addItemButtonLabel: {
     color: "#00604c",
