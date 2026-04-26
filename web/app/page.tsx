@@ -1,16 +1,12 @@
-import Image from 'next/image';
 import Link from 'next/link';
+
+import { SiteHeader } from '@/components/SiteHeader';
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-white text-slate-900">
       <div className="mx-auto max-w-7xl px-5 lg:px-12">
-        <header className="flex items-center justify-between py-4">
-          <Link href="/" className="flex items-center gap-2 text-base font-bold text-emerald-900">
-            <Image src="/logo.png" alt="Tindai" width={28} height={28} className="h-7 w-auto object-contain" priority />
-            Tindai
-          </Link>
-        </header>
+        <SiteHeader showTryAppCta />
 
         <section className="grid min-h-[calc(100vh-72px)] items-center gap-10 py-6 md:grid-cols-2 md:py-10">
           <div className="mx-auto w-full max-w-none md:mx-0 md:max-w-3xl">
@@ -18,8 +14,7 @@ export default function Home() {
               Para sa sari-sari store
             </p>
             <h1 className="mt-4 hyphens-none text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
-              Para sa busy na MSME na ayaw ng komplikado: simple, mabilis, at{' '}
-              <span className="whitespace-nowrap">pang-negosyo.</span>
+              Para sa tindahang kailangang kumilos agad: mabilis magtala, madaling makita ang kita.
             </h1>
             <p className="mt-4 text-base leading-7 text-slate-700">
               Bawas hula sa iyong negosyo, kita mo agad ang kulang at mabenta kahit walang internet.
@@ -27,7 +22,7 @@ export default function Home() {
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <a
-                href="#"
+                href="https://drive.google.com/uc?export=download&id=1NyqQO5pxPXSfWyY8I6vltzGhsYBm0bv5"
                 className="rounded-xl bg-emerald-700 px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800"
               >
                 Subukan nang Libre
